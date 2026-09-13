@@ -8,6 +8,8 @@
 <meta name="description" content="Know who is buying. Not just what.">
 <link rel="apple-touch-icon" href="assets/icon.jpg">
 <link rel="icon" href="assets/icon.jpg">
+<link rel="icon" href="assets/icon.jpg">
+<link rel="apple-touch-icon" href="assets/icon.jpg">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -66,6 +68,14 @@ input{font:inherit;color:inherit}
 /* ── Shell ─────────────────────────────────────────────────────────── */
 .shell{position:relative;z-index:1;display:flex;min-height:100vh;
   max-width:var(--wide);margin:0 auto}
+.whobar{display:flex;align-items:center;gap:8px;margin-bottom:var(--s3);
+  padding:8px 12px;border:1px solid var(--hair);border-radius:var(--r-pill);
+  background:var(--card);font-size:12px}
+.whobar .grow{flex:1}
+.whobar .dot{width:8px;height:8px;border-radius:50%;background:var(--dim);
+  flex:0 0 auto}
+.whobar .dot.on{background:var(--g);box-shadow:0 0 10px var(--g)}
+.btn.tiny{padding:5px 11px;font-size:11.5px;border-radius:var(--r-pill)}
 .main{flex:1;min-width:0;
   padding:var(--pad) var(--pad) calc(120px + env(safe-area-inset-bottom))}
 
@@ -104,18 +114,21 @@ input{font:inherit;color:inherit}
 /* Der Browser hat unten eine eigene Leiste, und die Pille lag halb
    darunter. Mehr Abstand nach unten, und die Seite bekommt entsprechend
    mehr Platz am Ende, damit die letzte Zeile nicht verdeckt wird. */
-.tabs{position:fixed;left:50%;transform:translateX(-50%);
-  bottom:calc(20px + env(safe-area-inset-bottom));z-index:40;
-  max-width:calc(100vw - 16px);
-  display:flex;gap:2px;padding:5px;
-  background:var(--glass);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-  border:1px solid var(--hair);border-radius:var(--r-pill);
-  box-shadow:0 12px 40px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.08)}
-.tabs a{display:flex;flex-direction:column;align-items:center;gap:2px;
-  padding:7px 9px;border-radius:var(--r-pill);color:var(--faint);
-  font-size:9px;letter-spacing:0;transition:.18s;white-space:nowrap}
-.tabs a svg{width:17px;height:17px}
-@media(min-width:420px){.tabs a{padding:8px 13px;font-size:9.5px}}
+/* Auf dem Handy eine durchgehende Leiste, keine schwebende Pille.
+   Sechs Ziele passen nicht in eine Pille auf 380 Pixel: die Raender
+   werden abgeschnitten und die Beschriftungen verschwinden, was genau
+   das war, was auf dem Screenshot zu sehen ist. */
+.tabs{position:fixed;left:0;right:0;
+  bottom:0;z-index:40;display:flex;justify-content:space-around;
+  gap:0;padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+  background:rgba(8,11,16,.96);backdrop-filter:blur(14px);
+  border-top:1px solid var(--hair)}
+.tabs a{display:flex;flex-direction:column;align-items:center;gap:3px;
+  flex:1 1 0;padding:6px 2px;border-radius:12px;color:var(--faint);
+  font-size:10px;letter-spacing:0;transition:.18s;white-space:nowrap}
+.tabs a svg{width:19px;height:19px}
+.tabs a.on{color:var(--g);background:rgba(61,224,148,.10)}
+@media(min-width:640px){.tabs{display:none}}
 .tabs a.on{color:var(--bg);background:var(--g);font-weight:600}
 @media(min-width:900px){.tabs{display:none}}
 
@@ -155,11 +168,15 @@ input{font:inherit;color:inherit}
   letter-spacing:.12em;text-shadow:0 0 20px rgba(25,232,160,.45)}
 .hero .mark span{display:block;font-size:clamp(10px,1.7vw,13px);color:var(--g);
   opacity:.9;margin-top:3px}
-.hero video{position:absolute;left:var(--s3);bottom:var(--s2);width:58px;
-  height:58px;object-fit:cover;border-radius:var(--r-sm);opacity:.96;
-  border:1px solid var(--hair);box-shadow:0 10px 30px rgba(0,0,0,.55)}
-@media(min-width:480px){.hero video{width:74px;height:74px;
-  left:var(--s4);bottom:var(--s3);border-radius:var(--r)}}
+/* Auf dem Handy gar nicht. Das Standbild sass mitten im Bild und lag
+   halb ueber dem Schriftzug, weil der Hero dort viel niedriger ist als
+   auf dem Schreibtisch. Ein Schmuckelement, das die Marke verdeckt,
+   gehoert weg, nicht kleiner. */
+.hero video{display:none}
+@media(min-width:560px){.hero video{display:block;position:absolute;
+  left:var(--s4);bottom:var(--s3);width:74px;height:74px;object-fit:cover;
+  border-radius:var(--r);opacity:.96;border:1px solid var(--hair);
+  box-shadow:0 10px 30px rgba(0,0,0,.55)}}
 @media(min-width:900px){.hero video{width:104px;height:104px}}
 
 /* ── Stat strip ───────────────────────────────────────────────────── */
@@ -676,6 +693,7 @@ function go() {
   if (name === "token") return openToken(parts[1], parts[2]);
   // Positions are asked for every time. A stale portfolio is worse than a
   // slow one, and this is the screen people act on.
+  statusBar();
   if (name === "me") { loadMe(); return; }
   // Settings too: a stale switch is worse than a slow one.
   if (name === "auto") { loadAuto(); return; }
@@ -1022,6 +1040,7 @@ window.onTelegramAuth = function (u) {
     Object.keys(u || {}).sort().forEach(k => q.set(k, String(u[k])));
     INIT = q.toString();
     try { localStorage.setItem(SAVED_KEY, INIT); } catch (e) {}
+    statusBar();
   } catch (e) { }
   location.hash = "#/me";
   loadMe();
@@ -1056,6 +1075,7 @@ function pendingBuyCard(out) {
 function signOut() {
   try { localStorage.removeItem(SAVED_KEY); } catch (e) {}
   INIT = "";
+  statusBar();
   loadMe();
 }
 
@@ -1542,7 +1562,35 @@ function loadPlans() {
 
 /* Nothing is fetched before the host is known, or the first paint of
    every screen would fail against a host that may be the wrong one. */
-pickApi().then(go);
+/* WER BIN ICH, auf jedem Bildschirm.
+
+   Der Anmeldeknopf sass nur auf Positions und Auto buy. Wer auf Signals
+   oder Scan landete, sah nirgends, ob er verbunden ist, und fand auch
+   keinen Weg dorthin. "Wo ist das ich verbunden bin" war deshalb keine
+   Frage, sondern ein Befund. */
+function statusBar() {
+  let bar = document.getElementById("who");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "who";
+    bar.className = "whobar";
+    const m = document.querySelector(".main");
+    if (!m) return;
+    m.insertBefore(bar, m.firstChild);
+  }
+  if (INIT) {
+    bar.innerHTML = '<span class="dot on"></span><b>Connected</b>' +
+      '<span class="grow"></span>' +
+      '<a class="btn tiny" href="#/me">Portfolio</a>' +
+      '<a class="btn tiny" href="#/scan">Buy</a>';
+  } else {
+    bar.innerHTML = '<span class="dot"></span><b>Not connected</b>' +
+      '<span class="grow"></span>' +
+      '<a class="btn tiny go" href="#/me">Sign in</a>';
+  }
+}
+
+pickApi().then(() => { go(); statusBar(); });
 window.addEventListener("load", () => {
   setTimeout(() => {
     const s = $("#splash");
