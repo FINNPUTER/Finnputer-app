@@ -298,6 +298,8 @@ input{font:inherit;color:inherit}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Scan a token</a>
     <a class="nav" href="#/me" data-nav="me">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h3A2.5 2.5 0 0 1 16 5.5V7"/><path d="M3 12h18"/></svg>Positions</a>
+    <a class="nav" href="#/auto" data-nav="auto">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>Auto buy</a>
     <a class="nav" href="#/top" data-nav="top">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 20h14M8 20v-7M12 20V5M16 20v-10"/></svg>Top calls</a>
     <a class="nav" href="#/record" data-nav="record">
@@ -387,6 +389,9 @@ input{font:inherit;color:inherit}
          list can find a signal an hour before we publish it, which is the
          product itself. The claim stays here, the list does not. -->
 
+    <!-- Auto buy -------------------------------------------------- -->
+    <section class="screen" id="s-auto"><div id="autoOut"></div></section>
+
     <!-- Positions ----------------------------------------------- -->
     <section class="screen" id="s-me"><div id="meOut"></div></section>
 
@@ -445,6 +450,8 @@ input{font:inherit;color:inherit}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Scan</a>
   <a href="#/me" data-nav="me">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h3A2.5 2.5 0 0 1 16 5.5V7"/></svg>Positions</a>
+  <a href="#/auto" data-nav="auto">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Auto</a>
   <a href="#/top" data-nav="top">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 20h14M8 20v-7M12 20V5M16 20v-10"/></svg>Top</a>
   <a href="#/plans" data-nav="plans">
@@ -460,7 +467,37 @@ input{font:inherit;color:inherit}
    publish it and hand out a way around whatever sits in front of the
    domain later.
    ════════════════════════════════════════════════════════════════════ */
-const API = "https://api.finnputerdex.com";
+/* WHERE THE API IS. A list, not one line.
+
+   A single hardcoded host is one DNS record away from a dark page, and
+   that is what happened: the custom name was not pointing at the service
+   yet, so every screen said "not answering" at once, signals, board,
+   record, scan.
+
+   The page now tries these in order and keeps the first that answers. The
+   Railway host is last, as the one that cannot be misconfigured. It is
+   already in core.js on the existing site, so listing it gives away
+   nothing that is not already out. */
+const API_BASES = [
+  "https://api.finnputerdex.com",
+  "https://mcp.finnputerdex.com",
+  "https://core-api-production-182c.up.railway.app",
+];
+let API = API_BASES[0];
+
+async function pickApi() {
+  for (const base of API_BASES) {
+    try {
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), 4000);
+      const r = await fetch(base + "/health", { signal: c.signal });
+      clearTimeout(t);
+      if (r.ok) { API = base; return base; }
+    } catch (e) { /* try the next one */ }
+  }
+  API = API_BASES[API_BASES.length - 1];
+  return API;
+}
 const BOT = "FinnputerTradeBot";
 
 const $  = s => document.querySelector(s);
@@ -586,7 +623,7 @@ document.addEventListener("click", e => {
 
 /* ── Router ────────────────────────────────────────────────────────── */
 const SCREENS = { signals:"s-signals", scan:"s-scan", token:"s-token",
-  me:"s-me", top:"s-top", record:"s-record", plans:"s-plans" };
+  me:"s-me", auto:"s-auto", top:"s-top", record:"s-record", plans:"s-plans" };
 let LOADED = {};
 
 function go() {
@@ -601,6 +638,8 @@ function go() {
   // Positions are asked for every time. A stale portfolio is worse than a
   // slow one, and this is the screen people act on.
   if (name === "me") { loadMe(); return; }
+  // Settings too: a stale switch is worse than a slow one.
+  if (name === "auto") { loadAuto(); return; }
   if (LOADED[name]) return reveal();
   LOADED[name] = true;
   ({ signals: loadSignals, top: loadTop,
@@ -963,6 +1002,133 @@ async function loadMe() {
   reveal(out);
 }
 
+/* ── Auto buy ──────────────────────────────────────────────────────
+   The same settings the bot menu has, on one screen. Every write goes
+   through the API, which clamps each number against the bot's own floors:
+   a value typed in a browser is a suggestion, and this one decides what
+   gets bought with real money. */
+async function saveAuto(patch, note) {
+  if (note) note.textContent = "saving…";
+  try {
+    const d = await meApi("/v1/me/settings", { method: "POST",
+                                               body: JSON.stringify(patch) });
+    if (note) note.textContent = "saved";
+    return d.settings;
+  } catch (e) {
+    if (note) note.textContent = "refused: " + String(e.message || e);
+    return null;
+  }
+}
+
+async function loadAuto() {
+  const out = $("#autoOut");
+  if (!INIT) return needTelegram(out);
+  if (!out.children.length) {
+    out.innerHTML = '<div class="card"><div class="skel"></div><div class="skel"></div></div>';
+  }
+  let d;
+  try { d = await meApi("/v1/me/settings"); }
+  catch (e) { return needTelegram(out); }
+  const st = d.settings || {};
+  out.innerHTML = "";
+  const note = el("p", "tiny");
+
+  const on = el("div", "card spot rv");
+  on.innerHTML = '<div class="head"><h2>Auto buy</h2><p>' +
+    (st.autobuy_enabled ? "on" : "off") + "</p></div>" +
+    '<p class="sub" style="margin-top:8px">It buys a signal the moment it lands, ' +
+    'with your size, and places the exit plan straight after. Your key never ' +
+    'leaves the bot.</p>';
+  const tog = el("button", "btn wide " + (st.autobuy_enabled ? "" : "go"));
+  tog.style.marginTop = "14px";
+  tog.textContent = st.autobuy_enabled ? "Switch it off" : "Switch it on";
+  tog.onclick = async () => {
+    await saveAuto({ autobuy_enabled: !st.autobuy_enabled }, note);
+    loadAuto();
+  };
+  on.appendChild(tog);
+  out.appendChild(on);
+
+  /* Size, budget, minimum score. Buttons rather than a text field: this is
+     a phone, and a mistyped size is a real trade. */
+  const rows = [
+    ["autobuy_size", "Size per signal", [0.05, 0.1, 0.25, 0.5, 1], "SOL"],
+    ["autobuy_budget", "Budget in total", [5, 10, 25, 50, 100], "SOL"],
+    ["autobuy_min_score", "Minimum safety score", [40, 50, 60, 70, 80], ""],
+  ];
+  rows.forEach(([key, label, vals, unit]) => {
+    const c = el("div", "card rv");
+    c.innerHTML = '<div class="head"><h2>' + label + '</h2><p class="num">' +
+      esc(String(st[key] ?? 0)) + " " + unit + "</p></div>";
+    const bar = el("div", "chips");
+    bar.style.marginTop = "12px";
+    vals.forEach(v => {
+      const b = el("button", "chip" + (Number(st[key]) === v ? " on" : ""));
+      b.textContent = v + (unit ? " " + unit : "");
+      b.onclick = async () => {
+        const o = {}; o[key] = v;
+        await saveAuto(o, note); loadAuto();
+      };
+      bar.appendChild(b);
+    });
+    c.appendChild(bar);
+    if (key === "autobuy_min_score") {
+      const w = el("p", "tiny");
+      w.style.marginTop = "10px";
+      w.textContent = "The score measures rug risk, not how far a token runs. " +
+        "A high bar buys less, not better.";
+      c.appendChild(w);
+    }
+    out.appendChild(c);
+  });
+
+  /* Which kinds of signal. The defaults are the two wallet kinds on and
+     scanner picks off, and that is not a detail: it is the difference
+     between buying what a rated wallet bought and buying everything. */
+  const kinds = el("div", "card rv");
+  kinds.innerHTML = '<div class="head"><h2>Which signals</h2></div>';
+  [["autobuy_on_signal", "Several rated wallets agreed"],
+   ["autobuy_on_solo", "One rated wallet bought"],
+   ["autobuy_on_scan", "Scanner picks"]].forEach(([k, lbl]) => {
+    const r = el("div", "row");
+    r.innerHTML = '<div class="grow"><b>' + lbl + "</b></div>" +
+      '<div class="right"><b class="' + (st[k] ? "pos" : "dim") + '">' +
+      (st[k] ? "on" : "off") + "</b></div>";
+    r.onclick = async () => {
+      const o = {}; o[k] = !st[k];
+      await saveAuto(o, note); loadAuto();
+    };
+    kinds.appendChild(r);
+  });
+  out.appendChild(kinds);
+
+  // Which way out. The names come from the API so they cannot drift.
+  const plan = el("div", "card rv");
+  plan.innerHTML = '<div class="head"><h2>Exit plan</h2><p>' +
+    esc(String(st.exit_strategy || "")) + "</p></div>";
+  const pl = el("div", "chips");
+  pl.style.marginTop = "12px";
+  (d.plans || []).forEach(p2 => {
+    const b = el("button", "chip" + (st.exit_strategy === p2.key ? " on" : ""));
+    b.textContent = p2.label + (p2.default ? " (default)" : "");
+    b.onclick = async () => {
+      await saveAuto({ exit_strategy: p2.key }, note); loadAuto();
+    };
+    pl.appendChild(b);
+  });
+  plan.appendChild(pl);
+  const lnk = el("p", "tiny");
+  lnk.style.marginTop = "10px";
+  lnk.innerHTML = 'What each one does, and what speaks against it: ' +
+    '<a href="#/plans" style="color:var(--g)">Exit plans</a>.';
+  plan.appendChild(lnk);
+  out.appendChild(plan);
+
+  note.style.marginTop = "4px";
+  out.appendChild(note);
+  reveal(out);
+}
+
 /* ── Top calls ─────────────────────────────────────────────────────── */
 let TOP_DAYS = 7;
 
@@ -1108,7 +1274,9 @@ function loadPlans() {
   if (n) n.href = botLink(id === "autoBot" ? "autobuy" : id === "plansBot" ? "plans" : "app");
 });
 
-go();
+/* Nothing is fetched before the host is known, or the first paint of
+   every screen would fail against a host that may be the wrong one. */
+pickApi().then(go);
 window.addEventListener("load", () => {
   setTimeout(() => {
     const s = $("#splash");
