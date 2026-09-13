@@ -709,11 +709,19 @@ async function loadStats() {
     /* Counts, never ratings. Publishing our own bar publishes a filter
        anyone can copy. How many wallets we watch is a selling point; what
        we think of each one is not. */
+    /* Keys that core_stats really returns. "opportunities_live" and
+       "signals_7d" were invented here, so one tile read 0 and the other
+       showed whatever happened to be in an unrelated field. A tile with a
+       made up key is worse than no tile: it looks measured. */
     const tiles = [
       ["wallets_known", "wallets watched"],
+      // NICHT "of them rated": wallets_known zaehlt Wallets in
+      // smart_wallets, wallets_scored Zeilen in wallet_scores. Zwei
+      // Tabellen, keine Teilmenge, und heute Morgen stand scored ueber
+      // known auf dem Bildschirm.
+      ["wallets_scored", "wallets rated"],
       ["runners", "tokens that ran"],
-      ["opportunities_live", "live right now"],
-      ["signals_7d", "signals this week"]];
+      ["sightings_24h", "wallet buys seen today"]];
     box.innerHTML = "";
     tiles.forEach(([k, label]) => {
       const c = el("div", "card stat spot");
@@ -730,8 +738,15 @@ async function loadBurns() {
     const d = await api("/v1/burns");
     b.innerHTML =
       '<div class="row"><div class="grow"><b>Burned so far</b><small>bought back from fees</small></div>' +
-      '<div class="right"><b class="num gold">' + (Number(d.burned_tokens || d.total_burned || 0)).toLocaleString("en-US") + "</b>" +
-      '<small class="num">' + Number(d.threshold_sol || 0) + " SOL per burn</small></div></div>";
+      '<div class="right"><b class="num gold">' +
+      (Number(d.burned_tokens || d.total_burned || 0)).toLocaleString("en-US") + "</b>" +
+      /* Only state the threshold when the API says it knows it. It is an
+         environment variable set on the worker, and the core-api is a
+         different process: printing its fallback published a number nobody
+         had set. */
+      (d.threshold_known
+        ? '<small class="num">' + Number(d.threshold_sol) + " SOL per burn</small>"
+        : "") + "</div></div>";
   } catch (e) { b.innerHTML = '<div class="empty">Burn figures unavailable.</div>'; }
 }
 
@@ -851,16 +866,27 @@ async function openToken(chain, mint) {
   if (!mint) { location.hash = "#/signals"; return; }
   out.innerHTML = '<div class="card"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>';
   try {
-    const rep = await api("/v1/scan/cached?mint=" + encodeURIComponent(mint) +
+    const raw = await api("/v1/scan/cached?mint=" + encodeURIComponent(mint) +
       "&chain=" + encodeURIComponent(chain || "solana"));
+    const rep = raw.report || raw;
+    /* A missing report is not a score of zero.
+       /v1/scan/cached answers for a token nobody has deep scanned with a
+       body that carries no risk and no market. Handing that to scanCard
+       drew "0/100" over an empty bar, "n/a" market cap and no findings,
+       which reads as "this token is as bad as it gets". It says nothing
+       at all. */
+    const scored = rep && rep.risk &&
+                   (rep.risk.score !== undefined && rep.risk.score !== null);
+    if (!scored) throw new Error("not scanned yet");
     out.innerHTML = "";
-    out.appendChild(scanCard(rep.report || rep));
+    out.appendChild(scanCard(rep));
   } catch (e) {
     /* No stored report. The chart and the trade buttons still work, and
        saying so beats an empty screen. */
     out.innerHTML =
       '<div class="card rv"><div class="head"><h2>' + esc(short(mint)) + "</h2><p>" + esc(chain || "solana") + "</p></div>" +
-      '<p class="sub" style="margin-top:8px">No stored report for this one yet. Run a fresh scan or read the chart.</p>' +
+      '<p class="sub" style="margin-top:8px">Not scanned yet. Nobody has run a deep read on ' +
+      'this token, so there is no score to show. That is not a bad score, it is no score.</p>' +
       '<div class="chart" style="margin-top:12px"><iframe loading="lazy" src="' + chartUrl(mint, chain) + '"></iframe></div>' +
       '<div class="btns" style="margin-top:12px">' +
       '<button class="btn go" onclick="location.hash=\'#/scan\';document.getElementById(\'scanIn\').value=\'' +
