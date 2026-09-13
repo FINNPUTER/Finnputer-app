@@ -8,6 +8,7 @@
 <meta name="description" content="Know who is buying. Not just what.">
 <link rel="apple-touch-icon" href="assets/icon.jpg">
 <link rel="icon" href="assets/icon.jpg">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -295,8 +296,8 @@ input{font:inherit;color:inherit}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Signals</a>
     <a class="nav" href="#/scan" data-nav="scan">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Scan a token</a>
-    <a class="nav" href="#/smart" data-nav="smart">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M17 9.5h4M19 7.5v4"/></svg>Smart money</a>
+    <a class="nav" href="#/me" data-nav="me">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h3A2.5 2.5 0 0 1 16 5.5V7"/><path d="M3 12h18"/></svg>Positions</a>
     <a class="nav" href="#/top" data-nav="top">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 20h14M8 20v-7M12 20V5M16 20v-10"/></svg>Top calls</a>
     <a class="nav" href="#/record" data-nav="record">
@@ -347,7 +348,8 @@ input{font:inherit;color:inherit}
             <p class="sub" style="margin-top:10px">Every tool on the market checks the token. That data is
               sold by vendors, which is why everyone has it and why it separates nobody. Almost nothing
               checks the wallets. That cannot be bought.</p>
-            <a class="btn wide go" style="margin-top:14px" href="#/smart">See the wallet archive</a>
+            <p class="tiny" style="margin-top:12px">The archive stays in the bot. It is the one
+              thing here that cannot be bought, so it is not on display.</p>
           </div>
           <div class="card spot rv" id="burnCard">
             <div class="head"><h2>Buyback and burn</h2></div>
@@ -379,23 +381,14 @@ input{font:inherit;color:inherit}
     <!-- Token --------------------------------------------------- -->
     <section class="screen" id="s-token"><div id="tokenOut"></div></section>
 
-    <!-- Smart money --------------------------------------------- -->
-    <section class="screen" id="s-smart">
-      <div class="card rv">
-        <div class="head"><h2>Smart money</h2><p id="smCount"></p></div>
-        <p class="sub" style="margin-top:8px">Wallets we saw early in tokens that later ran. The score says
-          the wallet is good. The best call says it is good at the thing this list exists for.</p>
-        <div class="chips" style="margin-top:12px" id="smFilter">
-          <button class="chip on" data-min="70">Score 70 plus</button>
-          <button class="chip" data-min="80">Score 80 plus</button>
-          <button class="chip" data-min="90">Score 90 plus</button>
-        </div>
-      </div>
-      <div class="card rv"><div class="list" id="smList"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div></div>
-    </section>
+    <!-- Wallets and their scores are NOT in this app.
+         The archive is the business: which addresses we rate, what each
+         scored, and which tokens it was early in. A visitor holding that
+         list can find a signal an hour before we publish it, which is the
+         product itself. The claim stays here, the list does not. -->
 
-    <!-- Wallet -------------------------------------------------- -->
-    <section class="screen" id="s-wallet"><div id="walletOut"></div></section>
+    <!-- Positions ----------------------------------------------- -->
+    <section class="screen" id="s-me"><div id="meOut"></div></section>
 
     <!-- Top ----------------------------------------------------- -->
     <section class="screen" id="s-top">
@@ -450,8 +443,8 @@ input{font:inherit;color:inherit}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Signals</a>
   <a href="#/scan" data-nav="scan">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Scan</a>
-  <a href="#/smart" data-nav="smart">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/></svg>Wallets</a>
+  <a href="#/me" data-nav="me">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h3A2.5 2.5 0 0 1 16 5.5V7"/></svg>Positions</a>
   <a href="#/top" data-nav="top">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 20h14M8 20v-7M12 20V5M16 20v-10"/></svg>Top</a>
   <a href="#/plans" data-nav="plans">
@@ -593,7 +586,7 @@ document.addEventListener("click", e => {
 
 /* ── Router ────────────────────────────────────────────────────────── */
 const SCREENS = { signals:"s-signals", scan:"s-scan", token:"s-token",
-  smart:"s-smart", wallet:"s-wallet", top:"s-top", record:"s-record", plans:"s-plans" };
+  me:"s-me", top:"s-top", record:"s-record", plans:"s-plans" };
 let LOADED = {};
 
 function go() {
@@ -605,10 +598,12 @@ function go() {
   window.scrollTo(0, 0);
 
   if (name === "token") return openToken(parts[1], parts[2]);
-  if (name === "wallet") return openWallet(parts[1]);
+  // Positions are asked for every time. A stale portfolio is worse than a
+  // slow one, and this is the screen people act on.
+  if (name === "me") { loadMe(); return; }
   if (LOADED[name]) return reveal();
   LOADED[name] = true;
-  ({ signals: loadSignals, smart: loadSmart, top: loadTop,
+  ({ signals: loadSignals, top: loadTop,
      record: loadRecord, plans: loadPlans }[name] || reveal)();
   reveal();
 }
@@ -664,11 +659,14 @@ async function loadStats() {
        distinct wallets seen early in a token, the score table holds one row
        per rated wallet, and neither is a subset of the other. The elite bar
        comes from the API so there is no second copy of it here. */
+    /* Counts, never ratings. Publishing our own bar publishes a filter
+       anyone can copy. How many wallets we watch is a selling point; what
+       we think of each one is not. */
     const tiles = [
-      ["wallets_scored", "wallets rated"],
-      ["wallets_elite", "above score " + (d.elite_score || 80)],
+      ["wallets_known", "wallets watched"],
       ["runners", "tokens that ran"],
-      ["opportunities_live", "live right now"]];
+      ["opportunities_live", "live right now"],
+      ["signals_7d", "signals this week"]];
     box.innerHTML = "";
     tiles.forEach(([k, label]) => {
       const c = el("div", "card stat spot");
@@ -751,8 +749,12 @@ function scanCard(rep) {
   act.innerHTML = '<div class="head"><h2>Trade it</h2><p>opens the bot with this token ready</p></div>' +
     '<div class="btns four" style="margin-top:12px">' +
     [[0.1, "01"], [0.5, "05"], [1.0, "10"], [2.0, "20"]].map(([a, tag]) =>
-      '<a class="btn go" target="_blank" rel="noopener" href="' +
-      buyLink(rep.mint, tag) + '">Buy ' + a.toFixed(1) + "</a>").join("") +
+      /* Inside Telegram this buys. Outside it there is no signature, so it
+         opens the bot with the token and amount ready instead of failing. */
+      (INIT
+        ? '<button class="btn go" data-buy="' + a + '">Buy ' + a.toFixed(1) + "</button>"
+        : '<a class="btn go" target="_blank" rel="noopener" href="' +
+          buyLink(rep.mint, tag) + '">Buy ' + a.toFixed(1) + "</a>")).join("") +
     "</div>" +
     '<div class="btns" style="margin-top:8px">' +
     '<a class="btn" target="_blank" rel="noopener" href="https://dexscreener.com/' +
@@ -763,7 +765,19 @@ function scanCard(rep) {
     '<p class="tiny" style="margin-top:10px">Scanner uses on chain data and may contain errors. ' +
     "Not financial advice. DYOR.</p>";
   wrap.appendChild(act);
+  if (INIT) {
+    const note = el("p", "tiny");
+    act.appendChild(note);
+    act.querySelectorAll("[data-buy]").forEach(b => {
+      b.onclick = () => act2(b, rep, note);
+    });
+  }
   return wrap;
+}
+
+function act2(btn, rep, note) {
+  act("buy", rep.mint, rep.token_symbol,
+      { amount: Number(btn.dataset.buy) }, note);
 }
 
 async function runScan(mint) {
@@ -809,101 +823,143 @@ async function openToken(chain, mint) {
   reveal(out);
 }
 
-/* ── Smart money ───────────────────────────────────────────────────── */
-let SM_MIN = 70;
+/* ── Positions, and trading ────────────────────────────────────────
+   Everything here needs to know whose money it is, and that comes from
+   Telegram's own signature, not from anything this page decides. Opened
+   outside Telegram there is no signature, so the screen says so instead
+   of showing an empty portfolio.
 
-async function loadSmart() {
-  const box = $("#smList");
+   Nothing here holds a key. A tap writes an intent, the bot executes it
+   within about a second and reports back. So the worst a stolen initData
+   could do is buy or sell in someone's own wallet, up to the ceiling the
+   API enforces, and never move funds out of it. */
+const TG = (window.Telegram && window.Telegram.WebApp) || null;
+const INIT = TG ? (TG.initData || "") : "";
+
+async function meApi(path, opts) {
+  const o = opts || {};
+  return api(path, Object.assign({}, o, {
+    headers: Object.assign({ "x-telegram-init-data": INIT }, o.headers || {})
+  }));
+}
+
+function needTelegram(where) {
+  where.innerHTML =
+    '<div class="card empty">Positions and trading open from inside Telegram, ' +
+    'because that is what tells us whose wallet this is.' +
+    '<div style="margin-top:14px"><a class="btn go" target="_blank" ' +
+    'rel="noopener" href="' + botLink("app") + '">Open in Telegram</a></div></div>';
+}
+
+let ME_BUSY = false;
+
+async function act(kind, token, symbol, extra, note) {
+  /* One press, one intent. The button locks until the answer is in: a
+     second press on a slow connection is the most likely way to trade
+     twice, and the API refuses it, but a screen that looks dead invites
+     exactly that press. */
+  if (ME_BUSY) return;
+  ME_BUSY = true;
+  if (note) note.textContent = "sending…";
   try {
-    const d = await api("/v1/smart-money?min=" + SM_MIN + "&limit=50");
-    box.innerHTML = "";
-    $("#smCount").textContent = d.eligible
-      ? d.eligible.toLocaleString("en-US") + " wallets clear this bar" : "";
-    const rows = d.wallets || [];
-    if (!rows.length) { box.innerHTML = '<div class="empty">Nothing clears this bar right now.</div>'; return; }
-    rows.forEach((w, i) => {
-      const r = el("div", "row");
-      const bits = [];
-      if (w.winners) bits.push(w.winners + " tokens");
-      if (w.label) bits.push(String(w.label).replace(/_/g, " "));
-      r.innerHTML = '<span class="rank num">' + (i + 1) + "</span>" +
-        '<div class="grow"><b class="num">' + esc(short(w.wallet)) + "</b>" +
-        "<small>" + esc(bits.join(", ") || "seen early") + "</small></div>" +
-        '<div class="right"><b class="num">' + Math.round(w.puter_score || 0) + "</b>" +
-        '<small class="num">' + (w.best_call >= 2 ? "best " + Number(w.best_call).toFixed(1) + "x" : "score") + "</small></div>";
-      r.onclick = () => { location.hash = "#/wallet/" + w.wallet; };
-      box.appendChild(r);
-    });
+    const body = Object.assign({ kind: kind, token: token, symbol: symbol,
+                                 chain: "solana" }, extra);
+    const r = await meApi("/v1/me/action", { method: "POST",
+                                             body: JSON.stringify(body) });
+    if (note) note.textContent = "queued, the bot is on it";
+    setTimeout(() => pollAction(r.id, note), 1500);
   } catch (e) {
-    box.innerHTML = '<div class="empty">The archive is rate limited right now. Try again in a minute.</div>';
+    if (note) note.textContent = "refused: " + String(e.message || e);
+    ME_BUSY = false;
   }
 }
 
-$("#smFilter").addEventListener("click", e => {
-  const c = e.target.closest(".chip"); if (!c) return;
-  $$("#smFilter .chip").forEach(x => x.classList.toggle("on", x === c));
-  SM_MIN = Number(c.dataset.min);
-  $("#smList").innerHTML = '<div class="skel"></div><div class="skel"></div>';
-  loadSmart();
-});
-
-/* ── Wallet ────────────────────────────────────────────────────────── */
-async function openWallet(addr) {
-  const out = $("#walletOut");
-  if (!addr) { location.hash = "#/smart"; return; }
-  out.innerHTML = '<div class="card"><div class="skel"></div><div class="skel"></div></div>';
+async function pollAction(id, note, tries) {
+  tries = tries || 0;
   try {
-    const w = await api("/v1/wallet/" + encodeURIComponent(addr));
-    out.innerHTML = "";
-    const head = el("div", "card spot rv");
-    head.innerHTML = '<div class="head"><h2 class="num">' + esc(short(addr)) + "</h2>" +
-      "<p>" + (w.known ? esc(String(w.label || "rated wallet").replace(/_/g, " ")) : "not in our set") + "</p></div>" +
-      (w.known
-        ? '<div class="score" style="margin-top:14px"><u class="num" style="color:var(--g)">0</u>' +
-          '<div class="bar"><i style="background:var(--g)"></i></div><span class="sub">Puter score</span></div>'
-        : '<p class="sub" style="margin-top:8px">' + esc(w.note || "") + "</p>");
-    out.appendChild(head);
-    if (w.known) {
-      const sc = Number(w.puter_score || 0);
-      countUp(head.querySelector("u"), sc);
-      setTimeout(() => { head.querySelector(".bar i").style.width = sc + "%"; }, 60);
-
-      const facts = el("div", "card rv");
-      const rows = [
-        ["tokens seen early", w.winners],
-        ["best call", w.best_call >= 2 ? Number(w.best_call).toFixed(1) + "x" : null],
-        ["closed trades", w.closed_trades],
-        ["win rate", w.win_rate != null ? Math.round(w.win_rate * 100) + "%" : null]
-      ].filter(r => r[1] != null && r[1] !== "");
-      facts.innerHTML = '<div class="head"><h2>Record</h2></div>' +
-        rows.map(r => '<div class="row"><div class="grow"><small>' + esc(r[0]) +
-          '</small></div><div class="right"><b class="num">' + esc(r[1]) + "</b></div></div>").join("");
-      out.appendChild(facts);
-
-      const toks = (w.tokens || []).slice(0, 20);
-      if (toks.length) {
-        const t = el("div", "card rv");
-        t.innerHTML = '<div class="head"><h2>Which tokens</h2><p>early in these</p></div>';
-        const list = el("div", "list");
-        toks.forEach(x => {
-          const r = el("div", "row");
-          const mult = x.deep_x || x.multiple;
-          r.innerHTML = '<div class="grow"><b>$' + esc(x.symbol || short(x.mint)) + "</b>" +
-            "<small>" + esc(x.chain || "solana") + "</small></div>" +
-            '<div class="right"><b class="num">' + (mult ? Number(mult).toFixed(1) + "x" : "open") + "</b></div>";
-          r.onclick = () => { location.hash = "#/token/" + (x.chain || "solana") + "/" + x.mint; };
-          list.appendChild(r);
-        });
-        t.appendChild(list);
-        out.appendChild(t);
+    const d = await meApi("/v1/me/actions?limit=5");
+    const a = (d.actions || []).find(x => x.id === id);
+    if (a && a.status !== "queued" && a.status !== "claimed") {
+      if (note) {
+        note.textContent =
+          a.status === "done" ? "done"
+          : a.status === "expired" ? "expired, the price had moved"
+          : "failed: " + String(a.error || "no reason given");
       }
+      ME_BUSY = false;
+      loadMe();
+      return;
     }
-    const back = el("div");
-    back.innerHTML = '<a class="btn wide" href="#/smart">Back to the list</a>';
-    out.appendChild(back);
-  } catch (e) {
-    out.innerHTML = '<div class="card empty">That wallet could not be read right now.</div>';
+  } catch (e) { /* keep waiting, the answer is in the database */ }
+  if (tries > 12) {
+    if (note) note.textContent = "still running, check the bot";
+    ME_BUSY = false;
+    return;
   }
+  setTimeout(() => pollAction(id, note, tries + 1), 1800);
+}
+
+async function loadMe() {
+  const out = $("#meOut");
+  if (!INIT) return needTelegram(out);
+  if (!out.children.length) {
+    out.innerHTML = '<div class="card"><div class="skel"></div><div class="skel"></div></div>';
+  }
+  let d;
+  try {
+    d = await meApi("/v1/me");
+  } catch (e) {
+    out.innerHTML = String(e.message || "").indexOf("401") >= 0
+      ? '' : '<div class="card empty">Could not read your positions right now.</div>';
+    if (!out.innerHTML) needTelegram(out);
+    return;
+  }
+  out.innerHTML = "";
+
+  const head = el("div", "card spot rv");
+  head.innerHTML = '<div class="head"><h2>' + esc(d.name || "Positions") + "</h2>" +
+    '<p class="num">' + (d.positions || []).length + " open</p></div>" +
+    (d.wallet ? '<p class="tiny" style="margin-top:8px" class="num">' +
+      esc(short(d.wallet)) + "</p>" : "") +
+    '<p class="sub" style="margin-top:8px">Buys and sells here run in the bot, which is the ' +
+    'only place your key lives. This page never holds it.</p>';
+  out.appendChild(head);
+
+  if (!(d.positions || []).length) {
+    const e2 = el("div", "card empty rv");
+    e2.textContent = "Nothing open. Scan a token and buy it from there.";
+    out.appendChild(e2);
+  }
+
+  (d.positions || []).forEach(pos => {
+    const c = el("div", "card rv");
+    c.innerHTML =
+      '<div class="head"><h2>$' + esc(pos.symbol || short(pos.mint)) + "</h2>" +
+      "<p>" + esc(pos.chain) + (pos.protected ? ", protected" : "") + "</p></div>" +
+      '<p class="tiny num" style="margin-top:6px">' +
+      Number(pos.amount).toLocaleString("en-US", { maximumFractionDigits: 2 }) +
+      " held</p>";
+    const row = el("div", "btns four");
+    row.style.marginTop = "12px";
+    const note = el("p", "tiny");
+    note.style.marginTop = "8px";
+    [25, 50, 75, 100].forEach(pct => {
+      const b = el("button", "btn" + (pct === 100 ? " go" : ""));
+      b.textContent = "Sell " + pct + "%";
+      b.onclick = () => act("sell", pos.mint, pos.symbol, { pct: pct }, note);
+      row.appendChild(b);
+    });
+    c.appendChild(row);
+    c.appendChild(note);
+    const more = el("div", "btns");
+    more.style.marginTop = "8px";
+    more.innerHTML =
+      '<a class="btn" href="#/token/' + esc(pos.chain) + "/" + esc(pos.mint) + '">Chart</a>' +
+      '<a class="btn" target="_blank" rel="noopener" href="' +
+      tokenLink(pos.mint) + '">Exit plan</a>';
+    c.appendChild(more);
+    out.appendChild(c);
+  });
   reveal(out);
 }
 
