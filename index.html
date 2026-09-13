@@ -479,10 +479,18 @@ input{font:inherit;color:inherit}
    already in core.js on the existing site, so listing it gives away
    nothing that is not already out. */
 const API_BASES = [
-  "https://api.finnputerdex.com",
+  // Proven: the MCP server answers here, and the MCP routes are registered
+  // on the same aiohttp app as every /v1 route, so this IS the core API.
   "https://mcp.finnputerdex.com",
+  // The name CORE_SETUP.md intends. Harmless if it does not resolve.
+  "https://core-api.finnputerdex.com",
+  // Last, because it cannot be misconfigured. Already published in core.js
+  // on the existing site, so listing it gives away nothing new.
   "https://core-api-production-182c.up.railway.app",
 ];
+// NOT api.finnputerdex.com. That is the x402 paywall service
+// (finnputer-x402/server.js), a different server that calls the scanner
+// internally. Pointing the app at it was what turned every screen dark.
 let API = API_BASES[0];
 
 async function pickApi() {
