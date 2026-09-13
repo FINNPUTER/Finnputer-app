@@ -543,6 +543,15 @@ const usd = n => n == null || !isFinite(n) ? "n/a"
   : n >= 1e3 ? "$" + Math.round(n / 1e3) + "k"
   : "$" + (n >= 1 ? Math.round(n) : n.toFixed(6));
 
+/* Money you own, to the dollar. usd() rounds to whole thousands
+   above 1k, which is right for a market cap and wrong for a
+   balance: a portfolio worth $2,281 read as "$2k", and the total
+   is the one number here nobody should have to squint at. */
+const usd2 = n => n == null || !isFinite(n) ? "n/a"
+  : n >= 1e6 ? "$" + (n / 1e6).toFixed(2) + "M"
+  : "$" + Number(n).toLocaleString("en-US",
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 const ago = t => { if (!t) return ""; const s = Math.floor(Date.now() / 1000 - t);
   return s < 60 ? s + "s ago" : s < 3600 ? Math.floor(s / 60) + "m ago"
        : s < 86400 ? Math.floor(s / 3600) + "h ago" : Math.floor(s / 86400) + "d ago"; };
@@ -929,7 +938,9 @@ async function openToken(chain, mint) {
    could do is buy or sell in someone's own wallet, up to the ceiling the
    API enforces, and never move funds out of it. */
 const TG = (window.Telegram && window.Telegram.WebApp) || null;
-const INIT = TG ? (TG.initData || "") : "";
+/* window.FINN_INIT ist ausschliesslich fuer den Rendertest da: in
+   Telegram kommt die Kennung aus initData, sonst gibt es keine. */
+const INIT = (TG ? (TG.initData || "") : "") || (window.FINN_INIT || "");
 
 async function meApi(path, opts) {
   const o = opts || {};
@@ -1011,14 +1022,49 @@ async function loadMe() {
   }
   out.innerHTML = "";
 
+  /* The terminal header: what the account is worth right now, split into
+     cash on each chain and the value of the open positions. A position
+     screen that cannot say whether you are up is a list, not a terminal. */
+  const t = d.totals || {};
   const head = el("div", "card spot rv");
-  head.innerHTML = '<div class="head"><h2>' + esc(d.name || "Positions") + "</h2>" +
-    '<p class="num">' + (d.positions || []).length + " open</p></div>" +
-    (d.wallet ? '<p class="tiny" style="margin-top:8px" class="num">' +
-      esc(short(d.wallet)) + "</p>" : "") +
-    '<p class="sub" style="margin-top:8px">Buys and sells here run in the bot, which is the ' +
-    'only place your key lives. This page never holds it.</p>';
+  head.innerHTML =
+    '<div class="head"><h2>' + esc(d.name || "Portfolio") + "</h2>" +
+    '<p class="num">' + (d.positions || []).length + " open" +
+    (d.open_orders ? ", " + d.open_orders + " orders" : "") + "</p></div>" +
+    '<u class="num" style="display:block;font-size:28px;font-weight:600;' +
+    'margin-top:10px;text-decoration:none">' + usd2(t.usd || 0) + "</u>" +
+    '<p class="tiny num">' + usd2(t.cash_usd || 0) + " cash, " +
+    usd2(t.positions_usd || 0) + " in positions</p>" +
+    (d.wallet ? '<p class="tiny num" style="margin-top:6px">' +
+      esc(short(d.wallet)) + "</p>" : "");
   out.appendChild(head);
+
+  /* One line per chain: what you hold of its own coin, at what it costs
+     now. A chain that could not be read says so; printing a zero would
+     read as "the money is gone", and that is the one wrong answer here. */
+  if ((d.chains || []).length) {
+    const ch = el("div", "card rv");
+    ch.innerHTML = '<div class="head"><h2>Chains</h2><p>live prices</p></div>';
+    const list = el("div", "list");
+    (d.chains || []).forEach(c => {
+      const r = el("div", "row");
+      if (c.unreadable) {
+        r.innerHTML = '<div class="grow"><b>' + esc(c.name || c.chain) + "</b>" +
+          "<small>could not be read just now</small></div>";
+      } else {
+        r.innerHTML =
+          '<div class="grow"><b>' + esc(c.symbol || c.chain) + "</b>" +
+          '<small class="num">' + usd(c.price_usd) + " each</small></div>" +
+          '<div class="right"><b class="num">' +
+          Number(c.balance).toLocaleString("en-US",
+            { maximumFractionDigits: 4 }) + "</b>" +
+          '<small class="num">' + usd2(c.usd) + "</small></div>";
+      }
+      list.appendChild(r);
+    });
+    ch.appendChild(list);
+    out.appendChild(ch);
+  }
 
   if (!(d.positions || []).length) {
     const e2 = el("div", "card empty rv");
@@ -1028,12 +1074,24 @@ async function loadMe() {
 
   (d.positions || []).forEach(pos => {
     const c = el("div", "card rv");
+    /* Profit only where both prices are real. A missing price is not a
+       loss of 100 percent, and printing one would be the same mistake as
+       reading an unscanned token as a score of zero. */
+    const p = pos.pnl_pct;
+    const cls = p == null ? "" : (p >= 0 ? "pos" : "neg");
     c.innerHTML =
       '<div class="head"><h2>$' + esc(pos.symbol || short(pos.mint)) + "</h2>" +
       "<p>" + esc(pos.chain) + (pos.protected ? ", protected" : "") + "</p></div>" +
-      '<p class="tiny num" style="margin-top:6px">' +
+      '<div class="row" style="padding-left:0;padding-right:0">' +
+      '<div class="grow"><b class="num">' + (pos.value_usd == null
+        ? "price unknown" : usd2(pos.value_usd)) + "</b>" +
+      '<small class="num">' +
       Number(pos.amount).toLocaleString("en-US", { maximumFractionDigits: 2 }) +
-      " held</p>";
+      " held</small></div>" +
+      '<div class="right"><b class="num ' + cls + '">' +
+      (p == null ? "&nbsp;" : (p >= 0 ? "+" : "") + p.toFixed(1) + "%") + "</b>" +
+      '<small class="num">' + (pos.buy_price
+        ? "in at " + usd(pos.buy_price) : "no entry price") + "</small></div></div>";
     const row = el("div", "btns four");
     row.style.marginTop = "12px";
     const note = el("p", "tiny");
