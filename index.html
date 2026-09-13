@@ -841,36 +841,75 @@ function scanCard(rep) {
   const act = el("div", "card rv");
   act.innerHTML = '<div class="head"><h2>Trade it</h2><p>opens the bot with this token ready</p></div>' +
     '<div class="btns four" style="margin-top:12px">' +
+    /* Always real buttons, signed in or not.
+       They used to turn into bot links when there was no signature, and the
+       scan screen has no way to sign in, so a visitor could never get into
+       the signed state from here: every tap left the site. Now a tap
+       without a signature takes you to the one screen that has the login,
+       and the amount you picked is waiting when you come back. */
     [[0.1, "01"], [0.5, "05"], [1.0, "10"], [2.0, "20"]].map(([a, tag]) =>
-      /* Inside Telegram this buys. Outside it there is no signature, so it
-         opens the bot with the token and amount ready instead of failing. */
-      (INIT
-        ? '<button class="btn go" data-buy="' + a + '">Buy ' + a.toFixed(1) + "</button>"
-        : '<a class="btn go" target="_blank" rel="noopener" href="' +
-          buyLink(rep.mint, tag) + '">Buy ' + a.toFixed(1) + "</a>")).join("") +
+      '<button class="btn go" data-buy="' + a + '">Buy ' + a.toFixed(1) +
+      "</button>").join("") +
     "</div>" +
     '<div class="btns" style="margin-top:8px">' +
+    /* The amount nobody guessed. Four presets cover most of it and never
+       the one you actually want, and the bot has had an X% field for the
+       sell side since forever. */
+    '<button class="btn go" data-buy="custom">Buy X</button>' +
     '<a class="btn" target="_blank" rel="noopener" href="https://dexscreener.com/' +
       esc(rep.chain || "solana") + "/" + esc(rep.mint) + '">Full chart</a>' +
+    "</div>" +
+    '<div class="btns" style="margin-top:8px">' +
     '<button class="btn" onclick="navigator.clipboard&&navigator.clipboard.writeText(\'' +
       esc(rep.mint) + '\')">Copy address</button>' +
+    '<a class="btn" target="_blank" rel="noopener" href="' +
+      tokenLink(rep.mint) + '">Open in the bot</a>' +
     "</div>" +
     '<p class="tiny" style="margin-top:10px">Scanner uses on chain data and may contain errors. ' +
     "Not financial advice. DYOR.</p>";
   wrap.appendChild(act);
-  if (INIT) {
-    const note = el("p", "tiny");
-    act.appendChild(note);
-    act.querySelectorAll("[data-buy]").forEach(b => {
-      b.onclick = () => act2(b, rep, note);
-    });
+  const note = el("p", "tiny");
+  note.style.marginTop = "8px";
+  act.appendChild(note);
+  act.querySelectorAll("[data-buy]").forEach(b => {
+    b.onclick = () => act2(b, rep, note);
+  });
+  if (!INIT) {
+    const hint = el("p", "tiny");
+    hint.style.marginTop = "6px";
+    hint.innerHTML = 'Not signed in yet, so a tap takes you to the ' +
+      '<a href="#/me" style="color:var(--g)">one screen with the login</a>. ' +
+      'After that, buying happens here.';
+    act.appendChild(hint);
   }
   return wrap;
 }
 
+let PENDING_BUY = null;
+
 function act2(btn, rep, note) {
-  act("buy", rep.mint, rep.token_symbol,
-      { amount: Number(btn.dataset.buy) }, note);
+  let amount = btn.dataset.buy;
+  if (amount === "custom") {
+    const raw = prompt("How much " +
+      ((rep.chain || "solana") === "solana" ? "SOL" : "ETH") + "?", "0.25");
+    if (raw === null) return;
+    amount = Number(String(raw).replace(",", "."));
+    if (!isFinite(amount) || amount <= 0) {
+      note.textContent = "that is not an amount";
+      return;
+    }
+  } else {
+    amount = Number(amount);
+  }
+  if (!INIT) {
+    /* Keep what they picked. Sending them to sign in and then forgetting
+       the amount is how a two step flow becomes a dead end. */
+    PENDING_BUY = { mint: rep.mint, symbol: rep.token_symbol,
+                    chain: rep.chain || "solana", amount: amount };
+    location.hash = "#/me";
+    return;
+  }
+  act("buy", rep.mint, rep.token_symbol, { amount: amount }, note);
 }
 
 async function runScan(mint) {
@@ -938,9 +977,87 @@ async function openToken(chain, mint) {
    could do is buy or sell in someone's own wallet, up to the ceiling the
    API enforces, and never move funds out of it. */
 const TG = (window.Telegram && window.Telegram.WebApp) || null;
-/* window.FINN_INIT ist ausschliesslich fuer den Rendertest da: in
-   Telegram kommt die Kennung aus initData, sonst gibt es keine. */
-const INIT = (TG ? (TG.initData || "") : "") || (window.FINN_INIT || "");
+
+/* WHO AM I, in a browser as well as in Telegram.
+
+   Inside Telegram the Mini App hands over initData. In a plain browser
+   there is none, and every signed screen said "open this in Telegram",
+   which is the correct answer to a question nobody wants while sitting at
+   a desk.
+
+   Telegram's Login Widget covers exactly that: one tap, Telegram signs the
+   same kind of payload with a different secret, and the API accepts both
+   since 366. The signed string is kept locally so the next visit is
+   already signed; it is not a password and it cannot move funds out, the
+   worst it permits is buying or selling inside the user's own wallet up
+   to the API's own ceiling.
+
+   window.FINN_INIT exists for the render test only. */
+const SAVED_KEY = "fp_tg_auth";
+function savedAuth() {
+  try {
+    const raw = localStorage.getItem(SAVED_KEY);
+    if (!raw) return "";
+    /* Telegram's hash stays valid forever, so the API refuses anything
+       older than a day. Dropping it here too keeps the screen honest
+       instead of showing a refusal it could have predicted. */
+    const age = Date.now() / 1000 - Number(new URLSearchParams(raw)
+      .get("auth_date") || 0);
+    if (!(age >= 0 && age < 86400)) { localStorage.removeItem(SAVED_KEY); return ""; }
+    return raw;
+  } catch (e) { return ""; }
+}
+let INIT = (TG ? (TG.initData || "") : "") || savedAuth()
+  || (window.FINN_INIT || "");
+
+/* Telegram calls this from the widget with the signed user object. */
+window.onTelegramAuth = function (u) {
+  /* Sign in FIRST, remember second.
+     This set localStorage before INIT, so in a private window, where
+     setItem throws, the catch swallowed it and the user was signed out
+     again the instant they signed in. Being signed in for this session is
+     the part that matters; remembering it is the convenience. */
+  try {
+    const q = new URLSearchParams();
+    Object.keys(u || {}).sort().forEach(k => q.set(k, String(u[k])));
+    INIT = q.toString();
+    try { localStorage.setItem(SAVED_KEY, INIT); } catch (e) {}
+  } catch (e) { }
+  location.hash = "#/me";
+  loadMe();
+};
+
+/* After signing in, offer the buy they were in the middle of. Offer, not
+   execute: a trade that happens because a login finished is a trade
+   nobody pressed. */
+function pendingBuyCard(out) {
+  if (!PENDING_BUY || !INIT) return;
+  const b = PENDING_BUY;
+  const c = el("div", "card spot rv");
+  c.innerHTML = '<div class="head"><h2>Finish your buy</h2>' +
+    '<p class="num">' + b.amount + "</p></div>" +
+    '<p class="sub" style="margin-top:8px">You picked ' + b.amount +
+    " on $" + esc(b.symbol || short(b.mint)) + " before signing in.</p>";
+  const note = el("p", "tiny");
+  const row = el("div", "btns");
+  row.style.marginTop = "12px";
+  const go = el("button", "btn go");
+  go.textContent = "Buy " + b.amount;
+  go.onclick = () => { PENDING_BUY = null;
+    act("buy", b.mint, b.symbol, { amount: b.amount }, note); };
+  const no = el("button", "btn");
+  no.textContent = "Not now";
+  no.onclick = () => { PENDING_BUY = null; loadMe(); };
+  row.appendChild(go); row.appendChild(no);
+  c.appendChild(row); c.appendChild(note);
+  out.appendChild(c);
+}
+
+function signOut() {
+  try { localStorage.removeItem(SAVED_KEY); } catch (e) {}
+  INIT = "";
+  loadMe();
+}
 
 async function meApi(path, opts) {
   const o = opts || {};
@@ -951,10 +1068,34 @@ async function meApi(path, opts) {
 
 function needTelegram(where) {
   where.innerHTML =
-    '<div class="card empty">Positions and trading open from inside Telegram, ' +
-    'because that is what tells us whose wallet this is.' +
-    '<div style="margin-top:14px"><a class="btn go" target="_blank" ' +
-    'rel="noopener" href="' + botLink("app") + '">Open in Telegram</a></div></div>';
+    '<div class="card rv"><div class="head"><h2>Sign in with Telegram</h2>' +
+    '<p>one tap</p></div>' +
+    '<p class="sub" style="margin-top:8px">Positions, auto buy and trading ' +
+    'need to know whose wallet this is. Telegram answers that and signs it, ' +
+    'so there is no password here and nothing to remember.</p>' +
+    '<div id="tgLogin" style="margin-top:14px"></div>' +
+    '<p class="tiny" style="margin-top:12px">Your key never leaves the bot. ' +
+    'This page can ask it to buy or sell in your own wallet, nothing else.' +
+    '</p></div>';
+  /* The widget is an iframe Telegram serves; it only renders on a domain
+     set with /setdomain in BotFather. If that step is missing the button
+     simply does not appear, so the bot link stays as the way through. */
+  const box = where.querySelector("#tgLogin");
+  const sc = document.createElement("script");
+  sc.async = true;
+  sc.src = "https://telegram.org/js/telegram-widget.js?22";
+  sc.setAttribute("data-telegram-login", BOT);
+  sc.setAttribute("data-size", "large");
+  sc.setAttribute("data-radius", "20");
+  sc.setAttribute("data-onauth", "onTelegramAuth(user)");
+  sc.setAttribute("data-request-access", "write");
+  box.appendChild(sc);
+  const alt = el("p", "tiny");
+  alt.style.marginTop = "12px";
+  alt.innerHTML = 'No button? Then the domain is not set on the bot yet. ' +
+    '<a target="_blank" rel="noopener" style="color:var(--g)" href="' +
+    botLink("app") + '">Open in Telegram</a> instead.';
+  where.querySelector(".card").appendChild(alt);
 }
 
 let ME_BUSY = false;
@@ -1021,6 +1162,7 @@ async function loadMe() {
     return;
   }
   out.innerHTML = "";
+  pendingBuyCard(out);
 
   /* The terminal header: what the account is worth right now, split into
      cash on each chain and the value of the open positions. A position
@@ -1037,6 +1179,16 @@ async function loadMe() {
     usd2(t.positions_usd || 0) + " in positions</p>" +
     (d.wallet ? '<p class="tiny num" style="margin-top:6px">' +
       esc(short(d.wallet)) + "</p>" : "");
+  /* Signed in from a browser, so there has to be a way out again. In
+     Telegram the Mini App owns the session and this would be a button
+     that cannot do anything. */
+  if (!TG) {
+    const so = el("button", "btn");
+    so.style.marginTop = "12px";
+    so.textContent = "Sign out";
+    so.onclick = signOut;
+    head.appendChild(so);
+  }
   out.appendChild(head);
 
   /* One line per chain: what you hold of its own coin, at what it costs
