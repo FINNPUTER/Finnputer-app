@@ -1193,11 +1193,35 @@ async function loadMe() {
   try {
     d = await meApi("/v1/me");
   } catch (e) {
-    out.innerHTML = String(e.message || "").indexOf("401") >= 0
-      ? '' : '<div class="card empty">Could not read your positions right now.</div>';
-    if (!out.innerHTML) needTelegram(out);
+    /* 374: the bar said Connected while the card said Sign in.
+       The bar was reading whether a saved sign-in EXISTS; the card was
+       reading what the SERVER says about it. A stored string the API
+       refuses is not a connection, and showing a green dot over it is the
+       same class of lie as a peak below the call: a local state printed as
+       a measured fact. The server's answer wins, and the stale sign-in is
+       dropped so the next visit does not repeat it. */
+    if (String(e.message || "").indexOf("401") >= 0) {
+      try { localStorage.removeItem(SAVED_KEY); } catch (_) {}
+      INIT = "";
+      statusBar();
+      needTelegram(out);
+      const why = el("p", "tiny");
+      why.style.marginTop = "10px";
+      why.textContent = "Your last sign-in is no longer valid. Telegram " +
+        "signatures expire after a day, so this is normal.";
+      const c = out.querySelector(".card");
+      if (c) c.appendChild(why);
+      return;
+    }
+    out.innerHTML =
+      '<div class="card">Could not read your positions right now. ' +
+      'Nothing is wrong with your wallet; this page could not reach the ' +
+      'API.</div>';
     return;
   }
+  /* Der Server hat geantwortet, also ist die Anmeldung wirklich gueltig. */
+  window.ME_OK = true;
+  statusBar();
   out.innerHTML = "";
   pendingBuyCard(out);
 
@@ -1331,7 +1355,14 @@ async function loadAuto() {
   }
   let d;
   try { d = await meApi("/v1/me/settings"); }
-  catch (e) { return needTelegram(out); }
+  catch (e) {
+    if (String(e.message || "").indexOf("401") >= 0) {
+      try { localStorage.removeItem(SAVED_KEY); } catch (_) {}
+      INIT = "";
+      statusBar();
+    }
+    return needTelegram(out);
+  }
   const st = d.settings || {};
   out.innerHTML = "";
   const note = el("p", "tiny");
@@ -1595,16 +1626,33 @@ function statusBar() {
     if (!m) return;
     m.insertBefore(bar, m.firstChild);
   }
+  /* "Connected" heisst: der Server hat diese Anmeldung schon einmal
+     angenommen. Bis dahin steht dort "Signed in", denn mehr wissen wir
+     nicht, und der Unterschied ist genau der, an dem sich dieser
+     Bildschirm widersprochen hat. */
   if (INIT) {
-    bar.innerHTML = '<span class="dot on"></span><b>Connected</b>' +
+    bar.innerHTML = '<span class="dot on"></span><b>' +
+      (window.ME_OK ? "Connected" : "Signed in") + "</b>" +
       '<span class="grow"></span>' +
-      '<a class="btn tiny" href="#/me">Portfolio</a>' +
-      '<a class="btn tiny" href="#/scan">Buy</a>';
+      '<button class="btn tiny" data-go="#/me">Portfolio</button>' +
+      '<button class="btn tiny" data-go="#/scan">Buy</button>';
   } else {
     bar.innerHTML = '<span class="dot"></span><b>Not connected</b>' +
       '<span class="grow"></span>' +
-      '<a class="btn tiny go" href="#/me">Sign in</a>';
+      '<button class="btn tiny go" data-go="#/me">Sign in</button>';
   }
+  /* A link to the screen you are already on does nothing.
+     These were <a href="#/me">, and pressed from #/me the hash does not
+     change, so the browser fires no hashchange and the router never runs.
+     The button looked dead, which on a bar whose whole job is to say
+     "you are here and this works" is the worst possible impression.
+     So: go there, and if we are already there, redraw anyway. */
+  bar.querySelectorAll("[data-go]").forEach(b => {
+    b.onclick = () => {
+      const to = b.dataset.go;
+      if (location.hash === to) go(); else location.hash = to;
+    };
+  });
 }
 
 pickApi().then(() => { go(); statusBar(); });
