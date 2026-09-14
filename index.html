@@ -949,6 +949,46 @@ $("#scanGo").onclick = () => { const v = $("#scanIn").value.trim(); if (v) runSc
 $("#scanIn").addEventListener("keydown", e => { if (e.key === "Enter") $("#scanGo").click(); });
 
 /* ── Token screen, reached from a signal or the top board ──────────── */
+/* 379: the name, not the address.
+   The detail screen printed "FYZc…8AhT" while the chart underneath it
+   said MONARK/SOL. An address is what you paste, a symbol is what you
+   recognise, and a page about one token should say which one.
+
+   Two sources, cheapest first. /v1/token reads the archive and costs
+   nothing; it knows the symbol for anything we have ever scanned or seen
+   run. For a token nobody has touched, Dexscreener answers from the pool
+   itself. Neither is allowed to hold the page up: the name arrives when
+   it arrives and the address stands until then. */
+async function tokenName(mint, chain) {
+  try {
+    const d = await api("/v1/token/" + encodeURIComponent(mint));
+    if (d && d.symbol) return d.symbol;
+  } catch (e) { /* keep going */ }
+  try {
+    const c = new AbortController();
+    const t = setTimeout(() => c.abort(), 4000);
+    const r = await fetch("https://api.dexscreener.com/latest/dex/tokens/" +
+      encodeURIComponent(mint), { signal: c.signal });
+    clearTimeout(t);
+    if (r.ok) {
+      const j = await r.json();
+      const p2 = (j.pairs || [])[0];
+      if (p2 && p2.baseToken && p2.baseToken.symbol) return p2.baseToken.symbol;
+    }
+  } catch (e) { /* the address stays */ }
+  return "";
+}
+
+function setTokenName(sym, mint) {
+  if (!sym) return;
+  document.querySelectorAll("[data-tokname]").forEach(h => {
+    h.textContent = "$" + sym;
+  });
+  (window.ME_POS || []).forEach(p2 => {
+    if (p2.mint === mint && !p2.symbol) p2.symbol = sym;
+  });
+}
+
 async function openToken(chain, mint) {
   const out = $("#tokenOut");
   if (!mint) { location.hash = "#/signals"; return; }
@@ -972,7 +1012,8 @@ async function openToken(chain, mint) {
     /* No stored report. The chart and the trade buttons still work, and
        saying so beats an empty screen. */
     out.innerHTML =
-      '<div class="card rv"><div class="head"><h2>' + esc(short(mint)) + "</h2><p>" + esc(chain || "solana") + "</p></div>" +
+      '<div class="card rv"><div class="head"><h2 data-tokname>' +
+        esc(short(mint)) + "</h2><p>" + esc(chain || "solana") + "</p></div>" +
       '<p class="sub" style="margin-top:8px">Not scanned yet. Nobody has run a deep read on ' +
       'this token, so there is no score to show. That is not a bad score, it is no score.</p>' +
       '<div class="chart" style="margin-top:12px"><iframe loading="lazy" src="' + chartUrl(mint, chain) + '"></iframe></div>' +
@@ -987,6 +1028,8 @@ async function openToken(chain, mint) {
      belong here, and selling only when this wallet actually holds it. */
   out.appendChild(tradeCard(mint, chain));
   reveal(out);
+  /* After the screen is up, never before it. */
+  tokenName(mint, chain).then(sym => setTokenName(sym, mint));
 }
 
 function tradeCard(mint, chain) {
