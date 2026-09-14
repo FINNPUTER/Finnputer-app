@@ -905,8 +905,8 @@ function scanCard(rep) {
 
 let PENDING_BUY = null;
 
-function act2(btn, rep, note) {
-  let amount = btn.dataset.buy;
+function act2(btn, rep, note, direct) {
+  let amount = direct !== undefined ? direct : btn.dataset.buy;
   if (amount === "custom") {
     const raw = prompt("How much " +
       ((rep.chain || "solana") === "solana" ? "SOL" : "ETH") + "?", "0.25");
@@ -981,7 +981,71 @@ async function openToken(chain, mint) {
         esc(mint) + "';document.getElementById('scanGo').click()\">Scan it</button>" +
       '<a class="btn" target="_blank" rel="noopener" href="' + tokenLink(mint) + '">Open in the bot</a></div></div>';
   }
+  /* 378: trade from the chart.
+     This screen is where a position lands when you tap Chart, and it had
+     no way to act: Scan it, or leave for the bot. Buying and selling both
+     belong here, and selling only when this wallet actually holds it. */
+  out.appendChild(tradeCard(mint, chain));
   reveal(out);
+}
+
+function tradeCard(mint, chain) {
+  const c = el("div", "card");
+  const pos = (window.ME_POS || []).find(p2 => p2.mint === mint);
+  const sym = (pos && pos.symbol) || short(mint);
+  c.innerHTML = '<div class="head"><h2>Trade it</h2><p>' +
+    (pos ? Number(pos.amount).toLocaleString("en-US",
+      { maximumFractionDigits: 2 }) + " held" : "not held here") + "</p></div>";
+  const note = el("p", "tiny");
+  note.style.marginTop = "8px";
+
+  const buys = el("div", "btns four");
+  buys.style.marginTop = "12px";
+  [0.1, 0.5, 1.0, 2.0].forEach(a => {
+    const b = el("button", "btn go");
+    b.textContent = "Buy " + a.toFixed(1);
+    b.onclick = () => act2(b, { mint: mint, token_symbol: sym, chain: chain },
+                          note, a);
+    buys.appendChild(b);
+  });
+  c.appendChild(buys);
+
+  const more = el("div", "btns");
+  more.style.marginTop = "8px";
+  const bx = el("button", "btn go");
+  bx.textContent = "Buy X";
+  bx.dataset.buy = "custom";
+  bx.onclick = () => act2(bx, { mint: mint, token_symbol: sym, chain: chain },
+                          note);
+  more.appendChild(bx);
+  c.appendChild(more);
+
+  /* Selling only where there is something to sell. A row of sell buttons
+     over a wallet that holds none of it is an invitation to a failed
+     transaction and a burnt fee. */
+  if (pos && Number(pos.amount) > 0) {
+    const sells = el("div", "btns four");
+    sells.style.marginTop = "10px";
+    [25, 50, 75, 100].forEach(pct => {
+      const b = el("button", "btn" + (pct === 100 ? " go" : ""));
+      b.textContent = "Sell " + pct + "%";
+      b.onclick = () => {
+        if (!INIT) { location.hash = "#/me"; return; }
+        act("sell", mint, sym, { pct: pct, chain: chain }, note);
+      };
+      sells.appendChild(b);
+    });
+    c.appendChild(sells);
+  }
+  c.appendChild(note);
+  if (!INIT) {
+    const hint = el("p", "tiny");
+    hint.style.marginTop = "6px";
+    hint.innerHTML = 'Not signed in, so a tap takes you to the ' +
+      '<a href="#/me" style="color:var(--g)">login</a> first.';
+    c.appendChild(hint);
+  }
+  return c;
 }
 
 /* ── Positions, and trading ────────────────────────────────────────
@@ -1135,15 +1199,19 @@ function needTelegram(where) {
   where.querySelector(".card").appendChild(alt);
 }
 
-let ME_BUSY = false;
+/* One press, one intent, PER TOKEN.
+   This was a single global flag, so buying one token locked selling a
+   different one for as long as the first took to report, up to twenty
+   seconds. The double tap this guards against is the same button twice,
+   not two different trades, and the API already refuses a second open job
+   for the same user and token. */
+const ME_BUSY = new Set();
+const busyKey = (kind, token) => kind + ":" + token;
 
 async function act(kind, token, symbol, extra, note) {
-  /* One press, one intent. The button locks until the answer is in: a
-     second press on a slow connection is the most likely way to trade
-     twice, and the API refuses it, but a screen that looks dead invites
-     exactly that press. */
-  if (ME_BUSY) return;
-  ME_BUSY = true;
+  const _k = busyKey(kind, token);
+  if (ME_BUSY.has(_k)) return;
+  ME_BUSY.add(_k);
   if (note) note.textContent = "sending…";
   try {
     const body = Object.assign({ kind: kind, token: token, symbol: symbol,
@@ -1151,14 +1219,14 @@ async function act(kind, token, symbol, extra, note) {
     const r = await meApi("/v1/me/action", { method: "POST",
                                              body: JSON.stringify(body) });
     if (note) note.textContent = "queued, the bot is on it";
-    setTimeout(() => pollAction(r.id, note), 1500);
+    setTimeout(() => pollAction(r.id, note, 0, _k), 1500);
   } catch (e) {
     if (note) note.textContent = "refused: " + String(e.message || e);
-    ME_BUSY = false;
+    ME_BUSY.delete(_k);
   }
 }
 
-async function pollAction(id, note, tries) {
+async function pollAction(id, note, tries, key) {
   tries = tries || 0;
   try {
     const d = await meApi("/v1/me/actions?limit=5");
@@ -1170,17 +1238,17 @@ async function pollAction(id, note, tries) {
           : a.status === "expired" ? "expired, the price had moved"
           : "failed: " + String(a.error || "no reason given");
       }
-      ME_BUSY = false;
+      if (key) ME_BUSY.delete(key);
       loadMe();
       return;
     }
   } catch (e) { /* keep waiting, the answer is in the database */ }
   if (tries > 12) {
     if (note) note.textContent = "still running, check the bot";
-    ME_BUSY = false;
+    if (key) ME_BUSY.delete(key);
     return;
   }
-  setTimeout(() => pollAction(id, note, tries + 1), 1800);
+  setTimeout(() => pollAction(id, note, tries + 1, key), 1800);
 }
 
 async function loadMe() {
@@ -1221,6 +1289,10 @@ async function loadMe() {
   }
   /* Der Server hat geantwortet, also ist die Anmeldung wirklich gueltig. */
   window.ME_OK = true;
+  /* Kept so the token screen knows whether this wallet holds the token
+     and can offer selling. Positions only, no wallet, no totals. */
+  window.ME_POS = (d.positions || []).map(p2 => ({
+    mint: p2.mint, symbol: p2.symbol, chain: p2.chain, amount: p2.amount }));
   statusBar();
   out.innerHTML = "";
   pendingBuyCard(out);
