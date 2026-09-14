@@ -41,7 +41,14 @@ html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{background:var(--bg);color:var(--ink);
   font-family:Sora,system-ui,-apple-system,sans-serif;
   font-size:14px;line-height:1.55;letter-spacing:-.01em;
-  overflow-x:hidden;min-height:100vh}
+  overflow-x:hidden;min-height:100vh;max-width:100%}
+/* overflow-x:hidden on the body alone is not enough when a child runs out
+   of its box: the browser then scrolls the next ancestor instead. clip
+   cannot be escaped. And the most common overflower on a crypto screen is
+   a single long word with no spaces in it, which is every address. */
+.shell{overflow-x:clip;max-width:100%}
+.main{overflow-x:clip}
+.card,.row,.whobar,.head h2{overflow-wrap:anywhere}
 a{color:inherit;text-decoration:none}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 input{font:inherit;color:inherit}
@@ -1511,9 +1518,45 @@ async function loadAuto() {
 
   /* Size, budget, minimum score. Buttons rather than a text field: this is
      a phone, and a mistyped size is a real trade. */
+  /* Amounts are in the native token of whichever chain the signal is on,
+     and until now the screen only ever offered SOL. Somebody trading
+     Robinhood or Base was being shown 0.5 SOL for a position that would
+     be paid in ETH, where 0.5 is about seventeen times more money.
+
+     So: a chain picker, presets that belong to that chain, and a free
+     amount, because four presets never contain the one you want. */
+  const NATIVE = {
+    solana:   { sym: "SOL", size: [0.05, 0.1, 0.25, 0.5, 1],
+                budget: [5, 10, 25, 50, 100] },
+    base:     { sym: "ETH", size: [0.005, 0.01, 0.025, 0.05, 0.1],
+                budget: [0.25, 0.5, 1, 2.5, 5] },
+    ethereum: { sym: "ETH", size: [0.005, 0.01, 0.025, 0.05, 0.1],
+                budget: [0.25, 0.5, 1, 2.5, 5] },
+    robinhood:{ sym: "ETH", size: [0.005, 0.01, 0.025, 0.05, 0.1],
+                budget: [0.25, 0.5, 1, 2.5, 5] },
+  };
+  const chain = window.AUTO_CHAIN || "solana";
+  const nat = NATIVE[chain] || NATIVE.solana;
+
+  const pick = el("div", "card rv");
+  pick.innerHTML = '<div class="head"><h2>Chain</h2><p>' + esc(nat.sym) +
+    "</p></div>" +
+    '<p class="sub" style="margin-top:8px">Sizes below are in this chain\'s ' +
+    'own token. The same number means very different money on each one.</p>';
+  const cbar = el("div", "chips");
+  cbar.style.marginTop = "12px";
+  Object.keys(NATIVE).forEach(c => {
+    const b = el("button", "chip" + (c === chain ? " on" : ""));
+    b.textContent = c + " (" + NATIVE[c].sym + ")";
+    b.onclick = () => { window.AUTO_CHAIN = c; loadAuto(); };
+    cbar.appendChild(b);
+  });
+  pick.appendChild(cbar);
+  out.appendChild(pick);
+
   const rows = [
-    ["autobuy_size", "Size per signal", [0.05, 0.1, 0.25, 0.5, 1], "SOL"],
-    ["autobuy_budget", "Budget in total", [5, 10, 25, 50, 100], "SOL"],
+    ["autobuy_size", "Size per signal", nat.size, nat.sym],
+    ["autobuy_budget", "Budget in total", nat.budget, nat.sym],
     ["autobuy_min_score", "Minimum safety score", [40, 50, 60, 70, 80], ""],
   ];
   rows.forEach(([key, label, vals, unit]) => {
@@ -1531,6 +1574,19 @@ async function loadAuto() {
       };
       bar.appendChild(b);
     });
+    if (key !== "autobuy_min_score") {
+      const x = el("button", "chip");
+      x.textContent = "other";
+      x.onclick = async () => {
+        const raw = prompt(label + " in " + unit, String(st[key] ?? ""));
+        if (raw === null) return;
+        const v = Number(String(raw).replace(",", "."));
+        if (!isFinite(v) || v < 0) { note.textContent = "not an amount"; return; }
+        const o = {}; o[key] = v;
+        await saveAuto(o, note); loadAuto();
+      };
+      bar.appendChild(x);
+    }
     c.appendChild(bar);
     if (key === "autobuy_min_score") {
       const w = el("p", "tiny");
