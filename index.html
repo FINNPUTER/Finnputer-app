@@ -1259,19 +1259,30 @@ async function loadMe() {
     const ch = el("div", "card rv");
     ch.innerHTML = '<div class="head"><h2>Chains</h2><p>live prices</p></div>';
     const list = el("div", "list");
-    (d.chains || []).forEach(c => {
+    /* Eine Kette ohne Bestand und ohne Fehler ist kein Befund, sie ist
+       Rauschen. Vier Nullzeilen untereinander verdecken die eine, die
+       etwas haelt. */
+    (d.chains || []).filter(c => c.unreadable ||
+        (Number(c.balance) || 0) > 0).forEach(c => {
       const r = el("div", "row");
       if (c.unreadable) {
         r.innerHTML = '<div class="grow"><b>' + esc(c.name || c.chain) + "</b>" +
           "<small>could not be read just now</small></div>";
       } else {
+        /* Three EVM chains all hold ETH, so "ETH" three times over is
+           correct and unreadable. The chain name says which one. */
         r.innerHTML =
-          '<div class="grow"><b>' + esc(c.symbol || c.chain) + "</b>" +
-          '<small class="num">' + usd(c.price_usd) + " each</small></div>" +
+          '<div class="grow"><b>' + esc(c.symbol || c.chain) +
+          ' <span class="dim" style="font-weight:400">' +
+          esc(c.name || c.chain) + "</span></b>" +
+          '<small class="num">' + (c.price_known === false
+            ? "price unavailable" : usd(c.price_usd) + " each") +
+          "</small></div>" +
           '<div class="right"><b class="num">' +
           Number(c.balance).toLocaleString("en-US",
-            { maximumFractionDigits: 4 }) + "</b>" +
-          '<small class="num">' + usd2(c.usd) + "</small></div>";
+            { maximumFractionDigits: 6 }) + "</b>" +
+          '<small class="num">' + (c.price_known === false
+            ? "&nbsp;" : usd2(c.usd)) + "</small></div>";
       }
       list.appendChild(r);
     });
