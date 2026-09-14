@@ -1087,16 +1087,33 @@ async function meApi(path, opts) {
 }
 
 function needTelegram(where) {
+  /* NO "rv" ON THIS CARD.
+     rv is the scroll reveal: opacity 0 until reveal() adds the class. This
+     card is drawn outside the normal render path and reveal() never ran on
+     it, so the whole screen looked empty with only the status bar on it.
+     An invisible sign-in prompt is worse than none: the visitor concludes
+     the product is broken. */
   where.innerHTML =
-    '<div class="card rv"><div class="head"><h2>Sign in with Telegram</h2>' +
-    '<p>one tap</p></div>' +
+    '<div class="card"><div class="head"><h2>Sign in with Telegram</h2>' +
+    '<p>one tap, no password</p></div>' +
     '<p class="sub" style="margin-top:8px">Positions, auto buy and trading ' +
-    'need to know whose wallet this is. Telegram answers that and signs it, ' +
-    'so there is no password here and nothing to remember.</p>' +
+    'need to know whose wallet this is. Telegram answers that and signs it.</p>' +
     '<div id="tgLogin" style="margin-top:14px"></div>' +
     '<p class="tiny" style="margin-top:12px">Your key never leaves the bot. ' +
     'This page can ask it to buy or sell in your own wallet, nothing else.' +
-    '</p></div>';
+    '</p></div>' +
+    /* And something to read while deciding. A signed out screen that shows
+       only a login button tells a first visitor nothing about what they
+       would be signing in to. */
+    '<div class="card" style="margin-top:var(--s3)">' +
+    '<div class="head"><h2>What you get after signing in</h2></div>' +
+    '<div class="list" style="margin-top:8px">' +
+    ['Your positions, with what each one is worth now and what it has done since you bought it.',
+     'Every chain you hold, with live prices and one total.',
+     'Buy in two taps from any scan, and sell 25, 50, 75 or 100 percent of a position.',
+     'Auto buy: size, budget, which kinds of signal, and which exit plan.'
+    ].map(t => '<div class="row"><div class="grow"><b>' + t + "</b></div></div>")
+      .join("") + "</div></div>";
   /* The widget is an iframe Telegram serves; it only renders on a domain
      set with /setdomain in BotFather. If that step is missing the button
      simply does not appear, so the bot link stays as the way through. */
