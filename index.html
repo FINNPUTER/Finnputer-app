@@ -213,7 +213,28 @@ input{font:inherit;color:inherit}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row small{display:block;font-size:11.5px;color:var(--dim);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row .right{white-space:nowrap}
+.row .right{white-space:nowrap;text-align:right;flex:0 0 auto}
+
+/* 391: the line has to FIT, not be clipped.
+   On a 380px screen the padding stack was 16 (page) + 20 (card) + 16
+   (row) on each side, which leaves under 290px for a symbol, a source
+   line, a multiple and a market cap. With overflow-x:clip in place the
+   surplus is no longer scrollable, it is simply cut off, and the screen
+   showed "1.67" without the x and "+46.8" without the percent sign.
+   Cutting a number in half is worse than a scrollbar. */
+@media(max-width:520px){
+  :root{--pad:10px}
+  .card{padding:14px}
+  .row{padding:10px 6px;gap:8px}
+  .row b{font-size:13.5px}
+  .row small{font-size:11px}
+  .row .right b{font-size:13.5px}
+  .row .right small{font-size:10.5px}
+  .head h2{font-size:17px}
+  /* The filter chips scroll sideways by design, but a half word at the
+     edge reads as breakage. A hint of padding shows there is more. */
+  .chips{padding-right:18px}
+}
 .row .right{text-align:right;flex:0 0 auto}
 .rank{width:22px;flex:0 0 22px;text-align:center;font-size:12px;color:var(--faint)}
 .list{padding:var(--s1) 0}
