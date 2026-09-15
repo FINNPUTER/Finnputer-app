@@ -85,6 +85,14 @@ input{font:inherit;color:inherit}
 .btn.tiny{padding:5px 11px;font-size:11.5px;border-radius:var(--r-pill)}
 .main{flex:1;min-width:0;
   padding:var(--pad) var(--pad) calc(120px + env(safe-area-inset-bottom))}
+/* 404: the last card sat against the fixed bar.
+   120px was measured against the floating pill this bar replaced. The bar
+   is taller, has a border and a safe-area inset underneath, and on a
+   screen that ends in a long list the final row is the one you are trying
+   to read. */
+@media(max-width:640px){
+  .main{padding-bottom:calc(168px + env(safe-area-inset-bottom))}
+}
 
 /* ── The left rail. A desktop is not a stretched phone. ───────────── */
 .rail{display:none}
@@ -1672,7 +1680,7 @@ let TOP_DAYS = 7;
 async function loadTop() {
   const box = $("#topList");
   try {
-    const d = await api("/v1/top?days=" + TOP_DAYS);
+    const d = await api("/v1/top?days=" + TOP_DAYS + "&limit=30");
     box.innerHTML = "";
     /* A reach rate, not a return: the highest point after the call, which
        nobody sells at. The line says so on its own rather than leaning on
@@ -1680,8 +1688,16 @@ async function loadTop() {
     $("#topSum").textContent = d.measured
       ? d.reached_2x + " of " + d.measured + " calls touched 2x, misses counted"
       : "";
+    /* 404: say how many are listed. Two windows showing ten rows each look
+       identical at a glance even when the eleventh differs, and the toggle
+       then reads as broken. */
+    const _cnt = (d.top || []).length;
     const rows = d.top || [];
     if (!rows.length) { box.innerHTML = '<div class="empty">No board for this window yet.</div>'; return; }
+    const foot = el("p", "tiny");
+    foot.style.marginTop = "10px";
+    foot.textContent = "Showing " + _cnt + " over " + TOP_DAYS + " days. "
+      + "The two windows differ further down the list, not at the top.";
     const medal = ["#1", "#2", "#3"];
     rows.forEach((t, i) => {
       const r = el("div", "row");
@@ -1694,6 +1710,7 @@ async function loadTop() {
       r.onclick = () => { location.hash = "#/token/" + (t.chain || "solana") + "/" + t.mint; };
       box.appendChild(r);
     });
+    box.appendChild(foot);
   } catch (e) {
     box.innerHTML = '<div class="empty">The board is not answering right now.</div>';
   }
