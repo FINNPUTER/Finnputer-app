@@ -944,8 +944,18 @@ let PENDING_BUY = null;
 function act2(btn, rep, note, direct) {
   let amount = direct !== undefined ? direct : btn.dataset.buy;
   if (amount === "custom") {
-    const raw = prompt("How much " +
-      ((rep.chain || "solana") === "solana" ? "SOL" : "ETH") + "?", "0.25");
+    /* 439: die Waehrung der KETTE, nicht SOL-oder-ETH geraten.
+       Auf Arc wird in USDC gezahlt, und die Abfrage fragte nach ETH.
+       0.25 ETH sind achthundert Dollar, 0.25 USDC sind fuenfundzwanzig
+       Cent: der Vorschlagswert allein war um Faktor 3000 daneben. */
+    const _c = rep.chain || "solana";
+    const _SYM = { solana: "SOL", base: "ETH", ethereum: "ETH",
+                   robinhood: "ETH", arc: "USDC", stable: "USDT0" };
+    const _sym = _SYM[_c] || "native token";
+    const _stable = (_c === "arc" || _c === "stable");
+    const raw = prompt("How much " + _sym + "?" +
+      (_stable ? "  (this chain pays in a stablecoin: 10 means $10)" : ""),
+      _stable ? "10" : "0.25");
     if (raw === null) return;
     amount = Number(String(raw).replace(",", "."));
     if (!isFinite(amount) || amount <= 0) {
@@ -1563,6 +1573,16 @@ async function loadAuto() {
                 budget: [0.25, 0.5, 1, 2.5, 5] },
     robinhood:{ sym: "ETH", size: [0.005, 0.01, 0.025, 0.05, 0.1],
                 budget: [0.25, 0.5, 1, 2.5, 5] },
+    /* 439: Arc und Stable zahlen in einem STABLECOIN, nicht in einem
+       volatilen Token. Das ist genau der Fall, vor dem der Kommentar
+       oben warnt, nur andersherum: 0.25 hiess auf Robinhood 800 Dollar
+       und heisst hier 25 Cent.
+
+       Deshalb Dollar-Betraege. Zehn heisst zehn Dollar. */
+    arc:      { sym: "USDC", size: [5, 10, 25, 50, 100],
+                budget: [10, 25, 50, 100, 250] },
+    stable:   { sym: "USDT0", size: [5, 10, 25, 50, 100],
+                budget: [10, 25, 50, 100, 250] },
   };
   const chain = window.AUTO_CHAIN || "solana";
   const nat = NATIVE[chain] || NATIVE.solana;
