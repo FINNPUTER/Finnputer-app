@@ -590,6 +590,36 @@ const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g,
   c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 const short = m => m ? m.slice(0, 4) + "..." + m.slice(-4) : "";
 
+/* 488: ONE table for every chain's own coin.
+   It lived inside loadAuto, so the buy dialog kept a second, hand typed
+   copy (_SYM), and the buy buttons on the scan and token screens had no
+   table at all: "Buy 2.0" on every chain. 2.0 is about 300 dollars in SOL,
+   about 7,000 in ETH and two dollars in USDC. Same button, three
+   different trades. Everything reads from here now.
+
+   size   = one trade, in the chain's own coin
+   budget = auto buy budget, same unit */
+const NATIVE = {
+  solana:   { sym: "SOL", size: [0.05, 0.1, 0.25, 0.5, 1],
+              budget: [5, 10, 25, 50, 100] },
+  base:     { sym: "ETH", size: [0.005, 0.01, 0.025, 0.05, 0.1],
+              budget: [0.25, 0.5, 1, 2.5, 5] },
+  ethereum: { sym: "ETH", size: [0.005, 0.01, 0.025, 0.05, 0.1],
+              budget: [0.25, 0.5, 1, 2.5, 5] },
+  robinhood:{ sym: "ETH", size: [0.005, 0.01, 0.025, 0.05, 0.1],
+              budget: [0.25, 0.5, 1, 2.5, 5] },
+  /* 439: Arc and Stable pay in a STABLECOIN. Ten means ten dollars. */
+  arc:      { sym: "USDC", size: [5, 10, 25, 50, 100],
+              budget: [10, 25, 50, 100, 250], stable: true },
+  stable:   { sym: "USDT0", size: [5, 10, 25, 50, 100],
+              budget: [10, 25, 50, 100, 250], stable: true },
+};
+const natOf = c => NATIVE[String(c || "solana").toLowerCase()] || NATIVE.solana;
+/* The four buy buttons: the largest four sizes. The smallest stays in the
+   auto buy picker, where it matters more. */
+const buyPresets = c => natOf(c).size.slice(1);
+const amtLabel = (a, c) => (natOf(c).stable ? "$" + a : a + " " + natOf(c).sym);
+
 const usd = n => n == null || !isFinite(n) ? "n/a"
   : n >= 1e9 ? "$" + (n / 1e9).toFixed(2) + "B"
   : n >= 1e6 ? "$" + (n / 1e6).toFixed(2) + "M"
@@ -901,9 +931,9 @@ function scanCard(rep) {
        the signed state from here: every tap left the site. Now a tap
        without a signature takes you to the one screen that has the login,
        and the amount you picked is waiting when you come back. */
-    [[0.1, "01"], [0.5, "05"], [1.0, "10"], [2.0, "20"]].map(([a, tag]) =>
-      '<button class="btn go" data-buy="' + a + '">Buy ' + a.toFixed(1) +
-      "</button>").join("") +
+    buyPresets(rep.chain).map(a =>
+      '<button class="btn go" data-buy="' + a + '">' +
+      esc(amtLabel(a, rep.chain)) + "</button>").join("") +
     "</div>" +
     '<div class="btns" style="margin-top:8px">' +
     /* The amount nobody guessed. Four presets cover most of it and never
@@ -928,6 +958,7 @@ function scanCard(rep) {
   act.querySelectorAll("[data-buy]").forEach(b => {
     b.onclick = () => act2(b, rep, note);
   });
+  act.appendChild(routeBox(rep.mint, rep.token_symbol, rep.chain, note));
   if (!INIT) {
     const hint = el("p", "tiny");
     hint.style.marginTop = "6px";
@@ -949,10 +980,9 @@ function act2(btn, rep, note, direct) {
        0.25 ETH sind achthundert Dollar, 0.25 USDC sind fuenfundzwanzig
        Cent: der Vorschlagswert allein war um Faktor 3000 daneben. */
     const _c = rep.chain || "solana";
-    const _SYM = { solana: "SOL", base: "ETH", ethereum: "ETH",
-                   robinhood: "ETH", arc: "USDC", stable: "USDT0" };
-    const _sym = _SYM[_c] || "native token";
-    const _stable = (_c === "arc" || _c === "stable");
+    /* 488: from NATIVE, not a second list that can drift from it. */
+    const _sym = natOf(_c).sym;
+    const _stable = !!natOf(_c).stable;
     const raw = prompt("How much " + _sym + "?" +
       (_stable ? "  (this chain pays in a stablecoin: 10 means $10)" : ""),
       _stable ? "10" : "0.25");
@@ -973,7 +1003,10 @@ function act2(btn, rep, note, direct) {
     location.hash = "#/me";
     return;
   }
-  act("buy", rep.mint, rep.token_symbol, { amount: amount }, note);
+  /* 488: the chain goes along. act() defaulted to solana, so every buy
+     from this page was sent as a Solana buy, whatever the token. */
+  act("buy", rep.mint, rep.token_symbol,
+      { amount: amount, chain: rep.chain || "solana" }, note);
 }
 
 async function runScan(mint) {
@@ -1090,9 +1123,9 @@ function tradeCard(mint, chain) {
 
   const buys = el("div", "btns four");
   buys.style.marginTop = "12px";
-  [0.1, 0.5, 1.0, 2.0].forEach(a => {
+  buyPresets(chain).forEach(a => {
     const b = el("button", "btn go");
-    b.textContent = "Buy " + a.toFixed(1);
+    b.textContent = amtLabel(a, chain);
     b.onclick = () => act2(b, { mint: mint, token_symbol: sym, chain: chain },
                           note, a);
     buys.appendChild(b);
@@ -1108,6 +1141,7 @@ function tradeCard(mint, chain) {
                           note);
   more.appendChild(bx);
   c.appendChild(more);
+  c.appendChild(routeBox(mint, sym, chain, note));
 
   /* Selling only where there is something to sell. A row of sell buttons
      over a wallet that holds none of it is an invitation to a failed
@@ -1207,16 +1241,18 @@ function pendingBuyCard(out) {
   const b = PENDING_BUY;
   const c = el("div", "card spot rv");
   c.innerHTML = '<div class="head"><h2>Finish your buy</h2>' +
-    '<p class="num">' + b.amount + "</p></div>" +
-    '<p class="sub" style="margin-top:8px">You picked ' + b.amount +
-    " on $" + esc(b.symbol || short(b.mint)) + " before signing in.</p>";
+    '<p class="num">' + esc(amtLabel(b.amount, b.chain)) + "</p></div>" +
+    '<p class="sub" style="margin-top:8px">You picked ' +
+    esc(amtLabel(b.amount, b.chain)) + " on $" +
+    esc(b.symbol || short(b.mint)) + " (" + esc(b.chain) +
+    ") before signing in.</p>";
   const note = el("p", "tiny");
   const row = el("div", "btns");
   row.style.marginTop = "12px";
   const go = el("button", "btn go");
-  go.textContent = "Buy " + b.amount;
+  go.textContent = "Buy " + amtLabel(b.amount, b.chain);
   go.onclick = () => { PENDING_BUY = null;
-    act("buy", b.mint, b.symbol, { amount: b.amount }, note); };
+    act("buy", b.mint, b.symbol, { amount: b.amount, chain: b.chain }, note); };
   const no = el("button", "btn");
   no.textContent = "Not now";
   no.onclick = () => { PENDING_BUY = null; loadMe(); };
@@ -1295,6 +1331,199 @@ function needTelegram(where) {
    not two different trades, and the API already refuses a second open job
    for the same user and token. */
 const ME_BUSY = new Set();
+
+/* ── 488: buy with money that sits on another chain ────────────────────
+   The bot does this since 474: SOL in the wallet, a token on Arc, one
+   confirmation, and Relay moves the money and buys at the other end. The
+   app had no way to it.
+
+   Two steps, on purpose, the same as the Telegram button:
+     xquote  asks where the money would come from, sends nothing
+     xbuy    sends
+   A button that moves money at once is the wrong build for a bridge: it
+   takes a minute, and whoever does not know what is running taps again.
+
+   Both run in the bot. The quote needs the wallet addresses, every
+   chain's RPC and Relay, and the core-api is deliberately without them. */
+function routeBox(mint, symbol, chain, note) {
+  const box = el("div");
+  box.style.marginTop = "12px";
+  const c = String(chain || "solana").toLowerCase();
+  if (c === "solana") return box;
+  const known = (window.ME_CHAINS || []).find(x => x.chain === c);
+  const empty = known && !known.unreadable && !(Number(known.balance) > 0);
+  const head = el("p", "sub");
+  head.textContent = empty
+    ? "🌉 Nothing on " + c + ". Pay from another chain: one tap moves it and buys."
+    : "🌉 No " + natOf(c).sym + " on " + c + "? Pay from another chain instead.";
+  box.appendChild(head);
+  const row = el("div", "btns four");
+  row.style.marginTop = "8px";
+  const out = el("div");
+  [5, 10, 25].forEach(u => {
+    const b = el("button", "btn");
+    b.textContent = "🌉 $" + u;
+    b.onclick = () => routeQuote(mint, symbol, c, u, out, note);
+    row.appendChild(b);
+  });
+  const bx = el("button", "btn");
+  bx.textContent = "🌉 $X";
+  bx.onclick = () => {
+    const raw = prompt("How many dollars? They come from whichever chain holds them.", "10");
+    if (raw === null) return;
+    const u = Number(String(raw).replace(",", ".").replace("$", ""));
+    if (!isFinite(u) || u < 1) { note.textContent = "that is not an amount"; return; }
+    routeQuote(mint, symbol, c, u, out, note);
+  };
+  row.appendChild(bx);
+  box.appendChild(row);
+  box.appendChild(out);
+  return box;
+}
+
+async function queueJob(kind, token, symbol, chain, amount) {
+  const r = await meApi("/v1/me/action", { method: "POST",
+    body: JSON.stringify({ kind: kind, token: token, symbol: symbol,
+                           chain: chain, amount: amount }) });
+  return r.id;
+}
+
+/* Wait for one job, then hand its row over. every ms, at most tries. */
+function waitJob(id, every, tries) {
+  return new Promise(resolve => {
+    let n = 0;
+    const tick = async () => {
+      n++;
+      try {
+        const d = await meApi("/v1/me/actions?limit=10");
+        const a = (d.actions || []).find(x => x.id === id);
+        if (a && a.status !== "queued" && a.status !== "claimed") {
+          return resolve(a);
+        }
+      } catch (e) { /* keep waiting, the answer is in the database */ }
+      if (n >= tries) return resolve(null);
+      setTimeout(tick, every);
+    };
+    setTimeout(tick, 1200);
+  });
+}
+
+async function routeQuote(mint, symbol, chain, usdAmt, out, note) {
+  if (!INIT) { location.hash = "#/me"; return; }
+  const k = busyKey("route", mint);
+  if (ME_BUSY.has(k)) return;
+  ME_BUSY.add(k);
+  out.innerHTML = "";
+  note.textContent = "looking for $" + usdAmt + " on your other chains…";
+  let row;
+  try {
+    const id = await queueJob("xquote", mint, symbol, chain, usdAmt);
+    row = await waitJob(id, 1500, 30);
+  } catch (e) {
+    note.textContent = "refused: " + String(e.message || e);
+    ME_BUSY.delete(k);
+    return;
+  }
+  ME_BUSY.delete(k);
+  if (!row) { note.textContent = "no answer yet, try again in a moment"; return; }
+  if (row.status !== "done" || !row.result) {
+    note.textContent = row.status === "expired"
+      ? "the bot was busy, tap again"
+      : "failed: " + String(row.error || "no reason given");
+    return;
+  }
+  note.textContent = "";
+  const r = row.result;
+  const card = el("div");
+  card.style.marginTop = "10px";
+  if (r.same_chain) {
+    card.innerHTML = '<p class="sub">You already have $' + usdAmt + " on " +
+      esc(chain) + ". No bridge needed: use the buy buttons above.</p>";
+    out.appendChild(card);
+    return;
+  }
+  if (!r.ok) {
+    card.innerHTML = '<p class="sub">Cannot route this buy. ' +
+      esc(r.note || "No reason given.") + "</p>";
+    if (r.max_usd != null && r.max_usd >= 1) {
+      const m = Math.floor(r.max_usd);
+      const b = el("button", "btn go");
+      b.style.marginTop = "8px";
+      b.textContent = "🌉 Try $" + m + " from " + (r.best_chain || "another chain");
+      b.onclick = () => routeQuote(mint, symbol, chain, m, out, note);
+      card.appendChild(b);
+    }
+    if ((r.unreadable || []).length) {
+      const u = el("p", "tiny");
+      u.style.marginTop = "6px";
+      u.textContent = (r.unreadable || []).join(", ") +
+        " could not be read just now, so this may be wrong.";
+      card.appendChild(u);
+    }
+    out.appendChild(card);
+    return;
+  }
+  const lines = [
+    "<b>Paying $" + esc(usdAmt) + " from " + esc(r.from_chain) + "</b>",
+    "You hold " + usd2(r.from_usd) + " there and the token is on " + esc(chain) + "."
+  ];
+  if (r.cost_usd != null) lines.push("Bridge and swap cost: about " + usd2(r.cost_usd) + ".");
+  if (r.impact_pct != null) lines.push("Price impact: " + esc(r.impact_pct) + "%.");
+  lines.push("One confirmation does both: it moves the funds and buys. " +
+    "If the bridge lands but the swap does not, the funds sit on " + esc(chain) +
+    " and nothing is retried on its own.");
+  card.innerHTML = '<p class="sub">' + lines.join("<br>") + "</p>";
+  const btns = el("div", "btns");
+  btns.style.marginTop = "10px";
+  const go = el("button", "btn go");
+  go.textContent = "Confirm $" + usdAmt + " from " + r.from_chain;
+  const no = el("button", "btn");
+  no.textContent = "Cancel";
+  no.onclick = () => { out.innerHTML = ""; };
+  go.onclick = () => routeSend(mint, symbol, chain, usdAmt, out, note, go, no);
+  btns.appendChild(go); btns.appendChild(no);
+  card.appendChild(btns);
+  out.appendChild(card);
+}
+
+async function routeSend(mint, symbol, chain, usdAmt, out, note, go, no) {
+  const k = busyKey("xbuy", mint);
+  if (ME_BUSY.has(k)) return;
+  ME_BUSY.add(k);
+  go.disabled = true; no.disabled = true;
+  note.textContent = "routing $" + usdAmt + " to " + chain +
+    ", this can take a minute. Do not tap again.";
+  let row;
+  try {
+    const id = await queueJob("xbuy", mint, symbol, chain, usdAmt);
+    /* A bridge may take minutes. Wait up to about six, then point to the
+       bot, which sends the receipt either way. */
+    row = await waitJob(id, 3000, 120);
+  } catch (e) {
+    note.textContent = "refused: " + String(e.message || e);
+    ME_BUSY.delete(k);
+    go.disabled = false; no.disabled = false;
+    return;
+  }
+  ME_BUSY.delete(k);
+  out.innerHTML = "";
+  if (!row) {
+    note.textContent = "still running. The bot sends the result to your Telegram chat.";
+    return;
+  }
+  const r = row.result || {};
+  if (row.status === "done") {
+    note.textContent = String(r.status) === "filled"
+      ? "done: moved from " + (r.from_chain || "another chain") + " and bought"
+      : "deposit sent, swap status " + (r.status || "unknown") +
+        ". If it did not fill, the funds sit on " + chain + ".";
+    loadMe();
+  } else if (row.status === "expired") {
+    note.textContent = "the bot was busy and nothing was sent, tap again";
+  } else {
+    note.textContent = "failed: " + String(row.error || "no reason given");
+  }
+}
 const busyKey = (kind, token) => kind + ":" + token;
 
 async function act(kind, token, symbol, extra, note) {
@@ -1303,6 +1532,7 @@ async function act(kind, token, symbol, extra, note) {
   ME_BUSY.add(_k);
   if (note) note.textContent = "sending…";
   try {
+    /* "solana" is only the fallback. Every caller passes the chain now. */
     const body = Object.assign({ kind: kind, token: token, symbol: symbol,
                                  chain: "solana" }, extra);
     const r = await meApi("/v1/me/action", { method: "POST",
@@ -1382,6 +1612,10 @@ async function loadMe() {
      and can offer selling. Positions only, no wallet, no totals. */
   window.ME_POS = (d.positions || []).map(p2 => ({
     mint: p2.mint, symbol: p2.symbol, chain: p2.chain, amount: p2.amount }));
+  /* 488: the balance per chain, so a trade card can tell "nothing here"
+     from "not known yet". Only chain, balance and whether it was read. */
+  window.ME_CHAINS = (d.chains || []).map(c2 => ({
+    chain: c2.chain, balance: c2.balance, unreadable: !!c2.unreadable }));
   statusBar();
   out.innerHTML = "";
   pendingBuyCard(out);
@@ -1484,7 +1718,10 @@ async function loadMe() {
     [25, 50, 75, 100].forEach(pct => {
       const b = el("button", "btn" + (pct === 100 ? " go" : ""));
       b.textContent = "Sell " + pct + "%";
-      b.onclick = () => act("sell", pos.mint, pos.symbol, { pct: pct }, note);
+      /* 488: with its chain. Without it a sell of an Arc or Base
+         position went out as a Solana sell and failed. */
+      b.onclick = () => act("sell", pos.mint, pos.symbol,
+                            { pct: pct, chain: pos.chain || "solana" }, note);
       row.appendChild(b);
     });
     c.appendChild(row);
@@ -1564,26 +1801,7 @@ async function loadAuto() {
 
      So: a chain picker, presets that belong to that chain, and a free
      amount, because four presets never contain the one you want. */
-  const NATIVE = {
-    solana:   { sym: "SOL", size: [0.05, 0.1, 0.25, 0.5, 1],
-                budget: [5, 10, 25, 50, 100] },
-    base:     { sym: "ETH", size: [0.005, 0.01, 0.025, 0.05, 0.1],
-                budget: [0.25, 0.5, 1, 2.5, 5] },
-    ethereum: { sym: "ETH", size: [0.005, 0.01, 0.025, 0.05, 0.1],
-                budget: [0.25, 0.5, 1, 2.5, 5] },
-    robinhood:{ sym: "ETH", size: [0.005, 0.01, 0.025, 0.05, 0.1],
-                budget: [0.25, 0.5, 1, 2.5, 5] },
-    /* 439: Arc und Stable zahlen in einem STABLECOIN, nicht in einem
-       volatilen Token. Das ist genau der Fall, vor dem der Kommentar
-       oben warnt, nur andersherum: 0.25 hiess auf Robinhood 800 Dollar
-       und heisst hier 25 Cent.
-
-       Deshalb Dollar-Betraege. Zehn heisst zehn Dollar. */
-    arc:      { sym: "USDC", size: [5, 10, 25, 50, 100],
-                budget: [10, 25, 50, 100, 250] },
-    stable:   { sym: "USDT0", size: [5, 10, 25, 50, 100],
-                budget: [10, 25, 50, 100, 250] },
-  };
+  /* 488: NATIVE is global now, one table for the whole page. */
   const chain = window.AUTO_CHAIN || "solana";
   const nat = NATIVE[chain] || NATIVE.solana;
 
