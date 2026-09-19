@@ -590,6 +590,28 @@ const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g,
   c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 const short = m => m ? m.slice(0, 4) + "..." + m.slice(-4) : "";
 
+/* 518: Marktwert statt Preis in der Positionsliste.
+   "in at $0.000051" sagt nichts, "in at $284k mcap" sagt alles. Der Bot
+   macht das seit 497, die App bekam die Zahlen nur nie. Fehlt der
+   Marktwert, bleibt es beim Preis: lieber die alte Zahl als eine
+   gerechnete, die niemand geprueft hat. */
+const mcapFmt = v => {
+  v = Number(v || 0);
+  if (v >= 1e9) return "$" + (v / 1e9).toFixed(2) + "B";
+  if (v >= 1e6) return "$" + (v / 1e6).toFixed(2) + "M";
+  if (v >= 1e3) return "$" + Math.round(v / 1e3) + "k";
+  return "$" + Math.round(v);
+};
+function posEntry(pos) {
+  if (pos.mcap_entry_usd && pos.mcap_usd) {
+    return "in at " + mcapFmt(pos.mcap_entry_usd) + " → " +
+      mcapFmt(pos.mcap_usd);
+  }
+  if (pos.mcap_usd) return "now " + mcapFmt(pos.mcap_usd) + " mcap";
+  if (pos.buy_price) return "in at " + usd(pos.buy_price);
+  return "no entry price";
+}
+
 /* 488: ONE table for every chain's own coin.
    It lived inside loadAuto, so the buy dialog kept a second, hand typed
    copy (_SYM), and the buy buttons on the scan and token screens had no
@@ -1732,8 +1754,7 @@ async function loadMe() {
       " held</small></div>" +
       '<div class="right"><b class="num ' + cls + '">' +
       (p == null ? "&nbsp;" : (p >= 0 ? "+" : "") + p.toFixed(1) + "%") + "</b>" +
-      '<small class="num">' + (pos.buy_price
-        ? "in at " + usd(pos.buy_price) : "no entry price") + "</small></div></div>";
+      '<small class="num">' + posEntry(pos) + "</small></div></div>";
     const row = el("div", "btns four");
     row.style.marginTop = "12px";
     const note = el("p", "tiny");
@@ -1748,7 +1769,25 @@ async function loadMe() {
       row.appendChild(b);
     });
     c.appendChild(row);
+    /* 519: nachkaufen, direkt an der Position.
+       "in den eigenen Positionen muessen Kaufmoeglichkeiten sein." Wer
+       seine Position ansieht, entscheidet in dem Moment ueber beides,
+       und bisher gab es dort nur den Ausgang. Jetzt dieselben
+       Betragsstufen wie im Scan, in der Waehrung DIESER Kette, und
+       darunter die Brueckenzeile: liegt auf der Kette nichts, kann mit
+       dem Geld einer anderen gekauft werden (513). */
+    const buys = el("div", "btns four");
+    buys.style.marginTop = "8px";
+    buyPresets(pos.chain).forEach(a => {
+      const b = el("button", "btn");
+      b.textContent = amtLabel(a, pos.chain);
+      b.onclick = () => act("buy", pos.mint, pos.symbol,
+                            { amount: a, chain: pos.chain || "solana" }, note);
+      buys.appendChild(b);
+    });
+    c.appendChild(buys);
     c.appendChild(note);
+    c.appendChild(routeBox(pos.mint, pos.symbol, pos.chain, note));
     const more = el("div", "btns");
     more.style.marginTop = "8px";
     more.innerHTML =
