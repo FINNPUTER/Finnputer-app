@@ -166,6 +166,15 @@ input{font:inherit;color:inherit}
 .card.spot:hover::after{opacity:1}
 
 .head{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s3)}
+/* 521: das Token-Bild in der Kopfzeile einer Position. Rund, klein, mit
+   einem Platzhalter darunter, damit die Zeile nicht springt, wenn ein
+   Bild fehlt oder langsam laedt. */
+.tok{display:flex;align-items:center;gap:8px;min-width:0}
+.tokimg{width:26px;height:26px;border-radius:50%;flex:0 0 26px;
+  object-fit:cover;background:#12261c;border:1px solid rgba(255,255,255,.08)}
+.tokph{width:26px;height:26px;border-radius:50%;flex:0 0 26px;
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+  font-weight:700;color:#0b0f0c;background:var(--acc)}
 .head h2{font-size:17px;font-weight:600;letter-spacing:-.02em}
 .head p{font-size:12px;color:var(--dim)}
 .sub{font-size:12.5px;color:var(--dim)}
@@ -968,7 +977,7 @@ function scanCard(rep) {
        without a signature takes you to the one screen that has the login,
        and the amount you picked is waiting when you come back. */
     buyPresets(rep.chain).map(a =>
-      '<button class="btn go" data-buy="' + a + '">' +
+      '<button class="btn go" data-buy="' + a + '">Buy ' +
       esc(amtLabel(a, rep.chain)) + "</button>").join("") +
     "</div>" +
     '<div class="btns" style="margin-top:8px">' +
@@ -1161,7 +1170,7 @@ function tradeCard(mint, chain) {
   buys.style.marginTop = "12px";
   buyPresets(chain).forEach(a => {
     const b = el("button", "btn go");
-    b.textContent = amtLabel(a, chain);
+    b.textContent = "Buy " + amtLabel(a, chain);
     b.onclick = () => act2(b, { mint: mint, token_symbol: sym, chain: chain },
                           note, a);
     buys.appendChild(b);
@@ -1743,8 +1752,20 @@ async function loadMe() {
        reading an unscanned token as a score of zero. */
     const p = pos.pnl_pct;
     const cls = p == null ? "" : (p >= 0 ? "pos" : "neg");
+    /* 521: Bild links vom Namen. Laedt es nicht, bleibt der Kreis mit
+       dem Anfangsbuchstaben stehen: ein kaputtes Bildsymbol sieht nach
+       Fehler aus, ein Platzhalter nicht. */
+    const _sym = String(pos.symbol || short(pos.mint) || "?");
+    const _ph = '<span class="tokph">' + esc(_sym.slice(0, 1).toUpperCase()) +
+      "</span>";
+    const _img = pos.icon_url
+      ? '<img class="tokimg" src="' + esc(pos.icon_url) + '" alt="" ' +
+        'loading="lazy" referrerpolicy="no-referrer" ' +
+        "onerror=\"this.outerHTML='" + _ph.replace(/'/g, "&#39;") + "'\">"
+      : _ph;
     c.innerHTML =
-      '<div class="head"><h2>$' + esc(pos.symbol || short(pos.mint)) + "</h2>" +
+      '<div class="head"><span class="tok">' + _img +
+      "<h2>$" + esc(_sym) + "</h2></span>" +
       "<p>" + esc(pos.chain) + (pos.protected ? ", protected" : "") + "</p></div>" +
       '<div class="row" style="padding-left:0;padding-right:0">' +
       '<div class="grow"><b class="num">' + (pos.value_usd == null
@@ -1759,6 +1780,48 @@ async function loadMe() {
     row.style.marginTop = "12px";
     const note = el("p", "tiny");
     note.style.marginTop = "8px";
+    /* 522: eigener Verkaufsbetrag, in Prozent ODER in Dollar.
+       Im Bot gibt es den X%-Knopf laengst, in der App fehlte er, und
+       Dollar konnte bisher keiner von beiden. "Verkauf 50 Dollar von dem
+       Ding" ist aber die Art, wie man wirklich denkt. */
+    const sellX = () => {
+      const raw = prompt(
+        "How much of $" + (pos.symbol || "this") + " do you want to sell?\n" +
+        "Percent (25 or 25%) or dollars ($50). This position is worth " +
+        usd(pos.value_usd) + ".", "50%");
+      if (raw === null) return;
+      const t = String(raw).trim().replace(",", ".");
+      let pct = null;
+      if (t.startsWith("$") || t.toLowerCase().endsWith("usd")) {
+        /* Dollar gegen den WERT dieser Position. Ohne Wert geht das
+           nicht, und geraten wird nichts. */
+        const d = Number(t.replace(/[^0-9.]/g, ""));
+        const v = Number(pos.value_usd || 0);
+        if (!isFinite(d) || d <= 0 || v <= 0) {
+          note.textContent = v > 0 ? "that is not an amount"
+            : "no value for this position, use a percent";
+          return;
+        }
+        pct = Math.min(100, Math.round((d / v) * 1000) / 10);
+      } else {
+        pct = Number(t.replace("%", ""));
+      }
+      if (!isFinite(pct) || pct <= 0) {
+        note.textContent = "that is not an amount"; return;
+      }
+      if (pct > 100) pct = 100;
+      /* Unter einem Prozent verkauft die Kette faktisch nichts und die
+         Gebuehr frisst es auf. Lieber sagen als stillschweigend senden. */
+      if (pct < 1) {
+        note.textContent = "that is under 1% of the position"; return;
+      }
+      if (!confirm("Sell " + pct + "% of $" + (pos.symbol || "this") +
+                   " (about " + usd(Number(pos.value_usd || 0) * pct / 100) +
+                   ")?")) return;
+      act("sell", pos.mint, pos.symbol,
+          { pct: pct, chain: pos.chain || "solana" }, note);
+    };
+
     [25, 50, 75, 100].forEach(pct => {
       const b = el("button", "btn" + (pct === 100 ? " go" : ""));
       b.textContent = "Sell " + pct + "%";
@@ -1768,6 +1831,12 @@ async function loadMe() {
                             { pct: pct, chain: pos.chain || "solana" }, note);
       row.appendChild(b);
     });
+    // 522: der eigene Betrag steht in derselben Reihe wie die Stufen,
+    // damit er nicht wie eine andere Art von Handlung aussieht.
+    const sxBtn = el("button", "btn");
+    sxBtn.textContent = "Sell X";
+    sxBtn.onclick = sellX;
+    row.appendChild(sxBtn);
     c.appendChild(row);
     /* 519: nachkaufen, direkt an der Position.
        "in den eigenen Positionen muessen Kaufmoeglichkeiten sein." Wer
@@ -1778,9 +1847,33 @@ async function loadMe() {
        dem Geld einer anderen gekauft werden (513). */
     const buys = el("div", "btns four");
     buys.style.marginTop = "8px";
+    /* 523: "wenn X, dann so viel Geld".
+       Der Bot zeigt das beim Setzen einer Gewinnstufe. Hier steht es an
+       der Position, damit man vorher weiss, worueber man entscheidet.
+       Gerechnet gegen den EINSTAND, weil sich jede Stufe darauf bezieht,
+       und nur wenn beides lesbar ist. */
+    const _entryPx = (Number(pos.buy_price) > 0) ? Number(pos.buy_price) : 0;
+    const _held = Number(pos.amount || 0);
+    if (_entryPx > 0 && _held > 0) {
+      const tp = el("p", "tiny");
+      tp.style.marginTop = "8px";
+      const rows = [2, 5, 10].map(x => {
+        const slice = _held * 0.25;           // ein Viertel, wie die Stufen
+        const back = slice * _entryPx * x;
+        return x + "x → " + usd(back) + " for 25%";
+      });
+      tp.textContent = "If it runs: " + rows.join(" · ");
+      c.appendChild(tp);
+    }
+    const buyHead = el("p", "tiny");
+    buyHead.textContent = "Buy more";
+    buyHead.style.marginTop = "10px";
+    c.appendChild(buyHead);
     buyPresets(pos.chain).forEach(a => {
-      const b = el("button", "btn");
-      b.textContent = amtLabel(a, pos.chain);
+      const b = el("button", "btn go");
+      /* 520: "Buy" steht mit drauf. Ein nackter Dollarbetrag sieht aus
+         wie eine Anzeige, nicht wie ein Knopf, der Geld ausgibt. */
+      b.textContent = "Buy " + amtLabel(a, pos.chain);
       b.onclick = () => act("buy", pos.mint, pos.symbol,
                             { amount: a, chain: pos.chain || "solana" }, note);
       buys.appendChild(b);
