@@ -1349,7 +1349,10 @@ function routeBox(mint, symbol, chain, note) {
   const box = el("div");
   box.style.marginTop = "12px";
   const c = String(chain || "solana").toLowerCase();
-  if (c === "solana") return box;
+  /* 513: auch auf Solana. Wer USDC auf Arc hat und einen Solana-Token
+     will, hatte bisher keinen Weg. Die Quelle ist nie die Zielkette, und
+     liegt auf der Zielkette schon genug, sagt die Antwort das und es
+     wird nichts gebrueckt. */
   const known = (window.ME_CHAINS || []).find(x => x.chain === c);
   const empty = known && !known.unreadable && !(Number(known.balance) > 0);
   const head = el("p", "sub");
