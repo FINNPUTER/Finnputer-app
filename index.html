@@ -618,7 +618,21 @@ const natOf = c => NATIVE[String(c || "solana").toLowerCase()] || NATIVE.solana;
 /* The four buy buttons: the largest four sizes. The smallest stays in the
    auto buy picker, where it matters more. */
 const buyPresets = c => natOf(c).size.slice(1);
-const amtLabel = (a, c) => (natOf(c).stable ? "$" + a : a + " " + natOf(c).sym);
+/* 515: Dollar auf dem Knopf, die Kettenwaehrung dazu.
+   Dollar sind die einzige Einheit, die auf jeder Kette dasselbe
+   bedeutet. Gesendet wird weiterhin die Kettenwaehrung, nur das Etikett
+   aendert sich: eine Umrechnung im Sendeweg waere die Stelle, an der ein
+   Rundungsfehler Geld kostet. */
+window.NATIVE_PX = window.NATIVE_PX || {};
+const amtLabel = (a, c) => {
+  const n = natOf(c);
+  if (n.stable) return "$" + a;
+  const px = Number(window.NATIVE_PX[String(c || "solana").toLowerCase()] || 0);
+  if (!px) return a + " " + n.sym;
+  const usd = a * px;
+  return (usd >= 10 ? "$" + Math.round(usd) : "$" + usd.toFixed(2))
+    + " · " + a + " " + n.sym;
+};
 
 const usd = n => n == null || !isFinite(n) ? "n/a"
   : n >= 1e9 ? "$" + (n / 1e9).toFixed(2) + "B"
@@ -1619,6 +1633,12 @@ async function loadMe() {
      from "not known yet". Only chain, balance and whether it was read. */
   window.ME_CHAINS = (d.chains || []).map(c2 => ({
     chain: c2.chain, balance: c2.balance, unreadable: !!c2.unreadable }));
+  /* 515: der Preis der Kettenwaehrung, damit die Knoepfe Dollar zeigen
+     koennen. Aus demselben Aufruf, kein zusaetzlicher. */
+  (d.chains || []).forEach(c3 => {
+    const _b = Number(c3.balance || 0), _u = Number(c3.usd || 0);
+    if (_b > 0 && _u > 0) window.NATIVE_PX[c3.chain] = _u / _b;
+  });
   statusBar();
   out.innerHTML = "";
   pendingBuyCard(out);
