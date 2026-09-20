@@ -264,12 +264,25 @@ input{font:inherit;color:inherit}
 /* Vier Filter passen nicht in eine Zeile auf einem 380er Schirm, und
    umgebrochen schieben sie die Liste nach unten. Seitlich wischbar, ohne
    Scrollbalken. */
-.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;
+/* 536: der letzte Filter wurde am Kartenrand einfach abgeschnitten und
+   sah aus wie ein Darstellungsfehler. Er IST wischbar, das sieht man nur
+   nicht. Drei Sachen dagegen:
+   weicher Auslauf nach rechts, damit der Schnitt gewollt aussieht,
+   Einrasten beim Wischen,
+   und etwas schmalere Chips, damit auf einem 380er Schirm fast alle
+   hineinpassen. */
+.chips{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;
+  scroll-snap-type:x proximity;
+  -webkit-mask-image:linear-gradient(to right,#000 88%,transparent 100%);
+  mask-image:linear-gradient(to right,#000 88%,transparent 100%);
   scrollbar-width:none;-ms-overflow-style:none}
+.chip{scroll-snap-align:start}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:0 0 auto}
-@media(min-width:640px){.chips{flex-wrap:wrap;overflow:visible}}
-.chip{padding:5px 12px;border-radius:var(--r-pill);font-size:11.5px;
+@media(min-width:640px){.chips{flex-wrap:wrap;overflow:visible;
+  -webkit-mask-image:none;mask-image:none}}
+.chip{padding:5px 10px;border-radius:var(--r-pill);font-size:11.5px;
+  white-space:nowrap;
   color:var(--dim);border:1px solid var(--hair);background:var(--glass);
   transition:.16s}
 .chip:hover{color:var(--ink)}
@@ -915,6 +928,9 @@ async function loadBurns() {
 $("#sigFilter").addEventListener("click", e => {
   const c = e.target.closest(".chip"); if (!c) return;
   $$("#sigFilter .chip").forEach(x => x.classList.toggle("on", x === c));
+  /* 536: den gewaehlten Filter ins Bild holen. Wer den letzten antippt,
+     soll ihn danach auch ganz sehen. */
+  try { c.scrollIntoView({block: "nearest", inline: "nearest"}); } catch (e) {}
   SIG_KIND = c.dataset.kind;
   $("#sigList").innerHTML = '<div class="skel"></div><div class="skel"></div>';
   loadSignals();
@@ -2125,6 +2141,7 @@ async function loadTop() {
 $("#topFilter").addEventListener("click", e => {
   const c = e.target.closest(".chip"); if (!c) return;
   $$("#topFilter .chip").forEach(x => x.classList.toggle("on", x === c));
+  try { c.scrollIntoView({block: "nearest", inline: "nearest"}); } catch (e) {}
   TOP_DAYS = Number(c.dataset.days);
   $("#topList").innerHTML = '<div class="skel"></div><div class="skel"></div>';
   loadTop();
