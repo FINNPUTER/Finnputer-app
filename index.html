@@ -172,9 +172,9 @@ input{font:inherit;color:inherit}
 .tok{display:flex;align-items:center;gap:8px;min-width:0}
 .tokwrap{position:relative;width:26px;height:26px;flex:0 0 26px;
   display:inline-block}
-.tokimg{position:absolute;inset:0;width:26px;height:26px;border-radius:50%;
+.tokimg{pointer-events:none;position:absolute;inset:0;width:26px;height:26px;border-radius:50%;
   object-fit:cover;background:#12261c;border:1px solid rgba(255,255,255,.08)}
-.tokph{position:absolute;inset:0;width:26px;height:26px;border-radius:50%;
+.tokph{pointer-events:none;position:absolute;inset:0;width:26px;height:26px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;font-size:12px;
   font-weight:700;color:#0b0f0c;background:var(--acc)}
 .head h2{font-size:17px;font-weight:600;letter-spacing:-.02em}
@@ -186,9 +186,9 @@ input{font:inherit;color:inherit}
 .hero{position:relative;border-radius:var(--r-lg);overflow:hidden;
   border:1px solid var(--hair)}
 .hero > img{width:100%;display:block;aspect-ratio:2172/724;object-fit:cover}
-.hero .veil{position:absolute;inset:0;background:linear-gradient(180deg,
+.hero .veil{pointer-events:none;position:absolute;inset:0;background:linear-gradient(180deg,
   transparent 40%,rgba(6,8,13,.55) 74%,rgba(6,8,13,.96) 100%)}
-.hero .mark{position:absolute;right:var(--s4);bottom:var(--s3);text-align:right;
+.hero .mark{pointer-events:none;position:absolute;right:var(--s4);bottom:var(--s3);text-align:right;
   max-width:62%}
 .hero .mark b{display:block;font-size:clamp(15px,3.6vw,26px);font-weight:700;
   letter-spacing:.12em;text-shadow:0 0 20px rgba(25,232,160,.45)}
@@ -271,16 +271,18 @@ input{font:inherit;color:inherit}
    Einrasten beim Wischen,
    und etwas schmalere Chips, damit auf einem 380er Schirm fast alle
    hineinpassen. */
+/* 538: KEINE Maske mehr.
+   mask-image erzeugt auf manchen Android-WebViews (und im Telegram-
+   Browser) eine eigene Zeichenebene, und dort kamen danach keine
+   Berührungen mehr an: in der App reagierte kein Knopf mehr. Der Effekt
+   war ohnehin nur eine Kruecke fuer zu lange Namen, und die sind seit
+   537 kurz genug. Eine Darstellungsspielerei, die Bedienung kostet, ist
+   nie den Handel wert. */
 .chips{display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;
-  scroll-snap-type:x proximity;
-  -webkit-mask-image:linear-gradient(to right,#000 88%,transparent 100%);
-  mask-image:linear-gradient(to right,#000 88%,transparent 100%);
   scrollbar-width:none;-ms-overflow-style:none}
-.chip{scroll-snap-align:start}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:0 0 auto}
-@media(min-width:640px){.chips{flex-wrap:wrap;overflow:visible;
-  -webkit-mask-image:none;mask-image:none}}
+@media(min-width:640px){.chips{flex-wrap:wrap;overflow:visible}}
 .chip{padding:5px 10px;border-radius:var(--r-pill);font-size:11.5px;
   white-space:nowrap;
   color:var(--dim);border:1px solid var(--hair);background:var(--glass);
@@ -432,10 +434,14 @@ input{font:inherit;color:inherit}
               <p class="num" id="sigAge"></p>
             </div>
             <div class="chips" style="margin-top:12px" id="sigFilter">
-              <button class="chip on" data-kind="">Everything</button>
+              <!-- 537: kuerzere Namen, damit alle vier auf einen 380er
+                   Schirm passen. Wischen ist eine Notloesung: was man
+                   nicht sieht, tippt niemand an. "Convergence" bleibt,
+                   das ist der Fachbegriff und der Kern des Produkts. -->
+              <button class="chip on" data-kind="">All</button>
               <button class="chip" data-kind="signal">Convergence</button>
-              <button class="chip" data-kind="solo">Single wallet</button>
-              <button class="chip" data-kind="scan">Scanner pick</button>
+              <button class="chip" data-kind="solo">Single</button>
+              <button class="chip" data-kind="scan">Scanner</button>
             </div>
             <div class="list" id="sigList"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
             <p class="tiny" style="margin-top:10px">Without a holder key a signal appears here when the
