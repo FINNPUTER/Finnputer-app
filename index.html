@@ -1709,7 +1709,15 @@ async function loadMe() {
     (d.open_orders ? ", " + d.open_orders + " orders" : "") + "</p></div>" +
     '<u class="num" style="display:block;font-size:28px;font-weight:600;' +
     'margin-top:10px;text-decoration:none">' + usd2(t.usd || 0) + "</u>" +
-    '<p class="tiny num">' + usd2(t.cash_usd || 0) + " cash, " +
+    /* 539: keine harte Null, wenn eine Kette nicht gelesen werden
+       konnte. "$0.00 cash" neben "Solana could not be read just now"
+       behauptet ein leeres Konto, das niemand gemessen hat. */
+    '<p class="tiny num">' +
+    (t.cash_partial
+      ? (t.cash_usd ? usd2(t.cash_usd) + "+ cash (" +
+           (t.cash_unreadable || []).join(", ") + " not readable)"
+         : "cash not readable right now")
+      : usd2(t.cash_usd || 0) + " cash") + ", " +
     usd2(t.positions_usd || 0) + " in positions</p>" +
     (d.wallet ? '<p class="tiny num" style="margin-top:6px">' +
       esc(short(d.wallet)) + "</p>" : "");
