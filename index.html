@@ -170,9 +170,11 @@ input{font:inherit;color:inherit}
    einem Platzhalter darunter, damit die Zeile nicht springt, wenn ein
    Bild fehlt oder langsam laedt. */
 .tok{display:flex;align-items:center;gap:8px;min-width:0}
-.tokimg{width:26px;height:26px;border-radius:50%;flex:0 0 26px;
+.tokwrap{position:relative;width:26px;height:26px;flex:0 0 26px;
+  display:inline-block}
+.tokimg{position:absolute;inset:0;width:26px;height:26px;border-radius:50%;
   object-fit:cover;background:#12261c;border:1px solid rgba(255,255,255,.08)}
-.tokph{width:26px;height:26px;border-radius:50%;flex:0 0 26px;
+.tokph{position:absolute;inset:0;width:26px;height:26px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;font-size:12px;
   font-weight:700;color:#0b0f0c;background:var(--acc)}
 .head h2{font-size:17px;font-weight:600;letter-spacing:-.02em}
@@ -1756,13 +1758,24 @@ async function loadMe() {
        dem Anfangsbuchstaben stehen: ein kaputtes Bildsymbol sieht nach
        Fehler aus, ein Platzhalter nicht. */
     const _sym = String(pos.symbol || short(pos.mint) || "?");
-    const _ph = '<span class="tokph">' + esc(_sym.slice(0, 1).toUpperCase()) +
-      "</span>";
-    const _img = pos.icon_url
-      ? '<img class="tokimg" src="' + esc(pos.icon_url) + '" alt="" ' +
-        'loading="lazy" referrerpolicy="no-referrer" ' +
-        "onerror=\"this.outerHTML='" + _ph.replace(/'/g, "&#39;") + "'\">"
-      : _ph;
+    /* 535: Platzhalter UND Bild, uebereinander.
+
+       Vorher steckte die Ersatzdarstellung als HTML in einem
+       onerror-Attribut. Das HTML enthaelt Anfuehrungszeichen, die das
+       Attribut beendet haben, und der Rest landete als Text im
+       Bildschirm: ein einsames F und ein '"> neben dem Symbol.
+
+       Jetzt liegt der Platzhalter IMMER da und das Bild darueber. Laedt
+       es nicht, entfernt es sich selbst (this.remove(), ohne ein
+       einziges Anfuehrungszeichen) und der Platzhalter kommt zum
+       Vorschein. Kein HTML mehr in einem Attribut. */
+    const _img = '<span class="tokwrap"><span class="tokph">' +
+      esc(_sym.slice(0, 1).toUpperCase()) + "</span>" +
+      (pos.icon_url
+        ? '<img class="tokimg" src="' + esc(pos.icon_url) + '" alt="" ' +
+          'loading="lazy" referrerpolicy="no-referrer" ' +
+          "onerror=this.remove()>"
+        : "") + "</span>";
     c.innerHTML =
       '<div class="head"><span class="tok">' + _img +
       "<h2>$" + esc(_sym) + "</h2></span>" +
