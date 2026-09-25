@@ -181,6 +181,33 @@ input{font:inherit;color:inherit}
 .head p{font-size:12px;color:var(--dim)}
 .sub{font-size:12.5px;color:var(--dim)}
 .tiny{font-size:11px;color:var(--faint)}
+/* 611: Gewinnmitnahme an der Position und der KI-Chat */
+.tpList{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tpChip{font-size:11.5px;padding:4px 10px;border-radius:var(--r-pill);
+  border:1px solid var(--line);color:var(--ink);background:var(--glass)}
+.tpChip b{color:var(--g);font-weight:600}
+.tpChip button{background:none;border:0;color:var(--dim);margin-left:6px;
+  cursor:pointer;font-size:12px}
+.aiFab{position:fixed;right:16px;bottom:96px;z-index:120;border-radius:var(--r-pill);
+  padding:11px 16px;background:var(--g);color:var(--bg);font-weight:700;
+  border:0;box-shadow:0 8px 30px rgba(25,232,160,.35);cursor:pointer}
+@media(min-width:900px){.aiFab{bottom:24px}}
+.aiPanel{position:fixed;inset:auto 12px 90px 12px;max-width:520px;margin-left:auto;
+  z-index:130;background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--r-lg);display:none;flex-direction:column;max-height:70vh;
+  box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.aiPanel.open{display:flex}
+.aiHead{display:flex;justify-content:space-between;align-items:center;
+  padding:12px 14px;border-bottom:1px solid var(--line);font-weight:600}
+.aiHead button{background:none;border:0;color:var(--dim);font-size:18px;cursor:pointer}
+.aiLog{overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.aiMsg{padding:9px 12px;border-radius:14px;max-width:88%;white-space:pre-wrap;
+  font-size:14px;line-height:1.45}
+.aiMsg.me{align-self:flex-end;background:var(--g);color:var(--bg)}
+.aiMsg.bot{align-self:flex-start;background:var(--glass);border:1px solid var(--line)}
+.aiForm{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}
+.aiForm input{flex:1;background:var(--bg);border:1px solid var(--line);
+  color:var(--ink);border-radius:var(--r-pill);padding:10px 14px;font-size:14px}
 
 /* ── Hero ─────────────────────────────────────────────────────────── */
 .hero{position:relative;border-radius:var(--r-lg);overflow:hidden;
@@ -1337,6 +1364,17 @@ function signOut() {
   loadMe();
 }
 
+/* 611: wie meApi, aber mit der Fehlermeldung des Servers statt "HTTP 400". */
+async function meJson(path, body) {
+  const r = await fetch(API + path, {
+    method: body ? "POST" : "GET",
+    headers: { "content-type": "application/json", "x-telegram-init-data": INIT },
+    body: body ? JSON.stringify(body) : undefined });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || ("HTTP " + r.status));
+  return d;
+}
+
 async function meApi(path, opts) {
   const o = opts || {};
   return api(path, Object.assign({}, o, {
@@ -1682,6 +1720,9 @@ async function loadMe() {
   window.ME_OK = true;
   /* Kept so the token screen knows whether this wallet holds the token
      and can offer selling. Positions only, no wallet, no totals. */
+  /* 611: die offenen Auftraege, fuer die Gewinnmitnahme an jeder Position */
+  try { window.ME_ORDERS = (await meJson("/v1/me/orders")).orders || []; }
+  catch (e) { window.ME_ORDERS = []; }
   window.ME_POS = (d.positions || []).map(p2 => ({
     mint: p2.mint, symbol: p2.symbol, chain: p2.chain, amount: p2.amount }));
   /* 488: the balance per chain, so a trade card can tell "nothing here"
@@ -1908,6 +1949,11 @@ async function loadMe() {
       tp.textContent = "If it runs: " + rows.join(" · ");
       c.appendChild(tp);
     }
+    /* 611: Gewinnmitnahme und Stop, direkt an der Position.
+       "Hier fehlen die Take-Profit-Buttons, wo ich eingeben kann, wie viel
+       ich bei wie viel x nehmen will." Derselbe Auftrag wie im Bot unter
+       Protect; ausgefuehrt wird er vom Bot. */
+    c.appendChild(tpBlock(pos, note));
     const buyHead = el("p", "tiny");
     buyHead.textContent = "Buy more";
     buyHead.style.marginTop = "10px";
@@ -1935,6 +1981,137 @@ async function loadMe() {
   });
   reveal(out);
 }
+
+/* 611: Gewinnmitnahme-Block einer Position */
+function tpBlock(pos, note) {
+  const box = el("div");
+  box.style.marginTop = "10px";
+  const head = el("p", "tiny");
+  head.textContent = "Take profit";
+  box.appendChild(head);
+  const row = el("div", "btns four");
+  row.style.marginTop = "6px";
+  const setOrder = async (type, x, pct) => {
+    if (note) note.textContent = "setting…";
+    try {
+      await meJson("/v1/me/tp", { token: pos.mint, chain: pos.chain || "solana",
+                                   type: type, x: x, pct: pct });
+      if (note) note.textContent = type === "tp"
+        ? "take profit set: sell " + pct + "% at " + x + "x"
+        : "stop set: sell " + pct + "% at -" + x + "%";
+      window.ME_ORDERS = (await meJson("/v1/me/orders")).orders || [];
+      drawList();
+    } catch (e) {
+      if (note) note.textContent = "refused: " + String(e.message || e);
+    }
+  };
+  [[2, 25], [5, 25], [10, 25]].forEach(([x, p]) => {
+    const b = el("button", "btn");
+    b.textContent = x + "x · " + p + "%";
+    b.onclick = () => setOrder("tp", x, p);
+    row.appendChild(b);
+  });
+  const cb = el("button", "btn");
+  cb.textContent = "Custom";
+  cb.onclick = () => {
+    const x = Number(String(prompt("Sell at which multiple? e.g. 3 for 3x", "3") || "")
+                     .replace(",", ".").replace(/x/i, ""));
+    if (!isFinite(x) || x < 1.05) { if (note) note.textContent = "that is not a multiple"; return; }
+    const p = Number(String(prompt("How much of the position, in %?", "25") || "")
+                     .replace("%", ""));
+    if (!isFinite(p) || p < 1 || p > 100) { if (note) note.textContent = "use 1 to 100 %"; return; }
+    setOrder("tp", x, p);
+  };
+  row.appendChild(cb);
+  box.appendChild(row);
+  const sl = el("button", "btn");
+  sl.style.marginTop = "8px";
+  sl.textContent = "Stop loss";
+  sl.onclick = () => {
+    const x = Number(String(prompt("Sell everything if it falls by how many %? e.g. 30", "30") || "")
+                     .replace("%", "").replace("-", ""));
+    if (!isFinite(x) || x < 1 || x > 95) { if (note) note.textContent = "use 1 to 95 %"; return; }
+    setOrder("sl", x, 100);
+  };
+  box.appendChild(sl);
+  const list = el("div", "tpList");
+  box.appendChild(list);
+  function drawList() {
+    list.innerHTML = "";
+    (window.ME_ORDERS || []).filter(o =>
+      String(o.token || "").toLowerCase() === String(pos.mint || "").toLowerCase()
+      && (o.type === "take_profit" || o.type === "stop_loss"))
+      .forEach(o => {
+        const chip = el("span", "tpChip");
+        const tp = o.type === "take_profit";
+        const trig = Number(o.trigger_pct || 0);
+        chip.innerHTML = (tp ? "TP <b>" + (Math.round((1 + trig / 100) * 100) / 100) + "x</b>"
+                             : "SL <b style=\"color:var(--red)\">" + trig + "%</b>") +
+          " · " + Math.round(Number(o.amount_pct || 0)) + "%";
+        const x = el("button");
+        x.textContent = "✕";
+        x.title = "cancel";
+        x.onclick = async () => {
+          try {
+            await meJson("/v1/me/order/cancel", { id: o.id });
+            window.ME_ORDERS = (window.ME_ORDERS || []).filter(z => z.id !== o.id);
+            drawList();
+          } catch (e) { if (note) note.textContent = "could not cancel"; }
+        };
+        chip.appendChild(x);
+        list.appendChild(chip);
+      });
+  }
+  drawList();
+  return box;
+}
+
+/* 611: der KI-Copilot in der App. Dieselben Credits wie im Bot. */
+function aiSetup() {
+  if (document.getElementById("aiFab")) return;
+  const fab = el("button", "aiFab");
+  fab.id = "aiFab";
+  fab.textContent = "✨ Ask";
+  const panel = el("div", "aiPanel");
+  panel.innerHTML =
+    '<div class="aiHead"><span>FINNPUTER AI</span><button aria-label="close">×</button></div>' +
+    '<div class="aiLog"><div class="aiMsg bot">Ask me about a token, your positions ' +
+    'or the calls. Paste a contract address and I scan it.</div></div>' +
+    '<form class="aiForm"><input placeholder="Ask anything…" maxlength="1500">' +
+    '<button class="btn go" type="submit">Send</button></form>';
+  document.body.appendChild(fab);
+  document.body.appendChild(panel);
+  const log = panel.querySelector(".aiLog");
+  const inp = panel.querySelector("input");
+  const add = (t, who) => {
+    const m = el("div", "aiMsg " + who);
+    m.textContent = t;
+    log.appendChild(m);
+    log.scrollTop = log.scrollHeight;
+    return m;
+  };
+  fab.onclick = () => { panel.classList.toggle("open"); if (panel.classList.contains("open")) inp.focus(); };
+  panel.querySelector(".aiHead button").onclick = () => panel.classList.remove("open");
+  panel.querySelector("form").onsubmit = async (ev) => {
+    ev.preventDefault();
+    const q = inp.value.trim();
+    if (!q) return;
+    if (!INIT) { add("Open this app from Telegram so the AI knows whose wallet it is.", "bot"); return; }
+    inp.value = "";
+    add(q, "me");
+    const wait = add("thinking…", "bot");
+    try {
+      const d = await meJson("/v1/me/ai", { message: q });
+      wait.textContent = d.response || "(no answer)";
+      if (typeof d.credits === "number")
+        add(d.credits + " AI credits left", "bot").style.opacity = ".6";
+    } catch (e) {
+      wait.textContent = String(e.message || e);
+    }
+  };
+}
+document.addEventListener("DOMContentLoaded", aiSetup);
+if (document.readyState !== "loading") aiSetup();
 
 /* ── Auto buy ──────────────────────────────────────────────────────
    The same settings the bot menu has, on one screen. Every write goes
