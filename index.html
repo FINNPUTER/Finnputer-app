@@ -467,16 +467,31 @@ input{font:inherit;color:inherit}
                    das ist der Fachbegriff und der Kern des Produkts. -->
               <button class="chip on" data-kind="">All</button>
               <button class="chip" data-kind="signal">Convergence</button>
-              <button class="chip" data-kind="solo">Single</button>
+              <button class="chip" data-kind="solo">🔥 Wallet</button>
               <button class="chip" data-kind="scan">Scanner</button>
             </div>
             <div class="list" id="sigList"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
-            <p class="tiny" style="margin-top:10px">Without a holder key a signal appears here when the
-              channel gets it, ten minutes after holders. That head start is what holding pays for.</p>
+            <p class="tiny" style="margin-top:10px" id="sigNote">Live calls go to Premium in the bot.
+              Here you see the calls that already did 2x, and everything older than a day.</p>
           </div>
         </div>
 
         <div class="col">
+          <div class="card spot rv" id="premCard">
+            <div class="head"><h2>🔥 Premium</h2><p class="num">0.1 SOL a week</p></div>
+            <div class="list" style="margin-top:10px">
+              <div class="row"><div class="grow"><b>Every 🔥 call, live</b><small>the tokens our wallet groups were early on</small></div></div>
+              <div class="row"><div class="grow"><b>Every wallet signal, live</b><small>a wallet with a real record just bought</small></div></div>
+              <div class="row"><div class="grow"><b>The full feed, if you want it</b><small>every call as we send it, the moonshots included</small></div></div>
+              <div class="row"><div class="grow"><b>Auto buy</b><small>also while you sleep</small></div></div>
+            </div>
+            <p class="tiny" style="margin-top:10px">Half of our 🔥 calls doubled after we sent them, every call counted.
+              Hold $50 of $FINNPUTER and you get every call except 🔥, ten minutes later, free.
+              Trading fee stays 0.8%, 10% off through an invite link.</p>
+            <div class="btns" style="margin-top:12px">
+              <a class="btn go" target="_blank" rel="noopener" id="premBtn" href="#">Get Premium in the bot</a>
+            </div>
+          </div>
           <div class="card spot rv">
             <div class="head"><h2>What makes this different</h2></div>
             <p class="sub" style="margin-top:10px">Every tool on the market checks the token. That data is
@@ -740,6 +755,7 @@ const ago = t => { if (!t) return ""; const s = Math.floor(Date.now() / 1000 - t
 const botLink = p => "https://t.me/" + BOT + (p ? "?start=" + p : "");
 const buyLink = (mint, tag) => botLink("b" + tag + mint);
 const tokenLink = mint => botLink("t" + mint);
+try { document.getElementById("premBtn").href = botLink("premium"); } catch (e) {}
 const chartUrl = (mint, chain) =>
   "https://dexscreener.com/" + (chain || "solana") + "/" + mint
   + "?embed=1&theme=dark&trades=0&info=0";
@@ -872,7 +888,7 @@ let SIG_KIND = "";
    anyone who opens it. */
 function kindLabel(k) {
   return k === "signal" ? "wallets we rate bought together"
-       : k === "solo"   ? "a wallet we rate bought in"
+       : k === "solo"   ? "a wallet with a record bought in"
        : "found by the scanner";
 }
 
@@ -881,7 +897,7 @@ function sigRow(s) {
   const x = s.peak_multiple;
   const chg = Number(s.change_24h || 0);
   r.innerHTML =
-    '<div class="grow"><b>$' + esc(s.symbol || short(s.mint)) + "</b>" +
+    '<div class="grow"><b>' + (s.fire ? "🔥 " : "") + "$" + esc(s.symbol || short(s.mint)) + "</b>" +
     '<small>' + esc(kindLabel(s.kind)) + " on " + esc(s.chain || "solana") + "</small></div>" +
     '<div class="right"><b class="num">' + (x ? x.toFixed(2) + "x" : "new") + "</b>" +
     '<small class="num">' + usd(s.market_cap || s.market_cap_at_alert) +
@@ -895,12 +911,22 @@ async function loadSignals() {
   loadStats(); loadBurns();
   const box = $("#sigList");
   try {
-    const d = await api("/v1/signals?limit=40" + (SIG_KIND ? "&kind=" + SIG_KIND : ""));
+    /* 660b: signed in, the list follows the viewer's access: Premium sees
+       every call live, holders every call except 🔥. */
+    let _ini = "";
+    try { _ini = INIT || ""; } catch (e) { _ini = ""; }
+    const d = await api("/v1/signals?limit=40" + (SIG_KIND ? "&kind=" + SIG_KIND : ""),
+      _ini ? { headers: { "x-telegram-init-data": _ini } } : undefined);
     box.innerHTML = "";
     const rows = d.signals || [];
     if (!rows.length) { box.innerHTML = '<div class="empty">Nothing published in this window yet.</div>'; return; }
     rows.forEach(s => box.appendChild(sigRow(s)));
     $("#sigAge").textContent = "newest " + ago(rows[0].sent_at);
+    /* 660: the API says what this visitor gets, so the line cannot drift
+       from the rule. */
+    if (d.access_note && $("#sigNote")) {
+      $("#sigNote").textContent = d.access_note.charAt(0).toUpperCase() + d.access_note.slice(1);
+    }
   } catch (e) {
     box.innerHTML = '<div class="empty">The archive is not answering right now. It comes back on its own.</div>';
   }
@@ -909,33 +935,20 @@ async function loadSignals() {
 async function loadStats() {
   const box = $("#statStrip");
   try {
-    const d = await api("/v1/stats");
-    /* Two independent counts, two independent labels. The archive counts
-       distinct wallets seen early in a token, the score table holds one row
-       per rated wallet, and neither is a subset of the other. The elite bar
-       comes from the API so there is no second copy of it here. */
-    /* Counts, never ratings. Publishing our own bar publishes a filter
-       anyone can copy. How many wallets we watch is a selling point; what
-       we think of each one is not. */
-    /* Keys that core_stats really returns. "opportunities_live" and
-       "signals_7d" were invented here, so one tile read 0 and the other
-       showed whatever happened to be in an unrelated field. A tile with a
-       made up key is worse than no tile: it looks measured. */
+    /* 660: results, not the archive. How many wallets we watch and rate
+       is our work and stays in the bot; what the calls did is the proof. */
+    const d = await api("/v1/top?days=30&limit=1");
     const tiles = [
-      ["wallets_known", "wallets watched"],
-      // NICHT "of them rated": wallets_known zaehlt Wallets in
-      // smart_wallets, wallets_scored Zeilen in wallet_scores. Zwei
-      // Tabellen, keine Teilmenge, und heute Morgen stand scored ueber
-      // known auf dem Bildschirm.
-      ["wallets_scored", "wallets rated"],
-      ["runners", "tokens that ran"],
-      ["sightings_24h", "wallet buys seen today"]];
+      [d.calls, "calls, last 30 days"],
+      [d.reached_2x, "did 2x or more"],
+      [d.reached_10x, "did 10x or more"],
+      [d.reached_50x, "did 50x or more"]];
     box.innerHTML = "";
-    tiles.forEach(([k, label]) => {
+    tiles.forEach(([v, label]) => {
       const c = el("div", "card stat spot");
       c.innerHTML = '<u class="num">0</u><i>' + label + "</i>";
       box.appendChild(c);
-      countUp(c.querySelector("u"), d[k] || 0);
+      countUp(c.querySelector("u"), Number(v || 0));
     });
   } catch (e) { box.innerHTML = ""; }
 }
@@ -1001,6 +1014,40 @@ function scanCard(rep) {
     '<div class="row"><div class="grow"><b class="num">' + usd(market.market_cap) + "</b><small>market cap</small></div>" +
     '<div class="right"><b class="num">' + usd(market.liquidity_usd) + "</b><small>liquidity</small></div></div>";
   wrap.appendChild(m);
+
+  /* 660: website and socials, and who made the token. The bot has shown
+     both since 656; the page did not. */
+  const lk = rep.links || {};
+  const _lp = [];
+  const _u = x => /^https?:\/\//.test(String(x || "")) ? String(x) : "https://" + String(x || "").replace(/^@/, "x.com/");
+  if ((lk.websites || [])[0]) _lp.push(["🌐 Website", lk.websites[0]]);
+  const so = lk.socials || {};
+  [["twitter", "𝕏 X"], ["telegram", "✈️ Telegram"], ["discord", "💬 Discord"]].forEach(([k, l]) => {
+    if (so[k]) _lp.push([l, so[k]]);
+  });
+  const cr = rep.creator || null;
+  const rb = ((rep.bundles || {}).rated_buyers) || {};
+  if (_lp.length || cr || rb.measured) {
+    const p = el("div", "card rv");
+    let h = '<div class="head"><h2>Who is behind it</h2></div>';
+    h += '<div class="btns" style="margin-top:12px;flex-wrap:wrap">' + (_lp.length
+      ? _lp.map(([l, u]) => '<a class="btn" target="_blank" rel="noopener nofollow" href="' +
+          esc(_u(u)) + '">' + esc(l) + "</a>").join("")
+      : '<span class="tiny">No website or socials listed</span>') + "</div>";
+    if (cr && cr.address) {
+      h += '<div class="row" style="margin-top:10px"><div class="grow"><b>Creator</b><small>' +
+        esc(cr.line || "") + '</small></div><div class="right"><a class="num" target="_blank" rel="noopener" href="' + (String(cr.address).startsWith("0x") ? "https://blockscan.com/address/" : "https://solscan.io/account/") +
+        esc(cr.address) + '">' + esc(short(cr.address)) + " ↗</a></div></div>";
+    }
+    if (rb.measured) {
+      const f = Number(rb.found || 0), n = Number(rb.checked || 0);
+      h += '<div class="row"><div class="grow"><b>' + (f ? f + " of the first " + n + " buyers have a record with us"
+        : "None of the first " + n + " buyers has a record with us") +
+        '</b><small>which wallets, and what they did before, is in the bot</small></div></div>';
+    }
+    p.innerHTML = h;
+    wrap.appendChild(p);
+  }
 
   const ch = el("div", "card rv");
   ch.innerHTML = '<div class="head"><h2>Chart</h2><p>live candles</p></div>' +
