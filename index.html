@@ -2014,6 +2014,15 @@ async function loadMe() {
                             { amount: a, chain: pos.chain || "solana" }, note);
       buys.appendChild(b);
     });
+    /* 674: "Buy X" auch hier. Die Positionen hatten nur die festen
+       Betraege, der Scan-Bildschirm hatte schon immer "Buy X". */
+    const bx674 = el("button", "btn go");
+    bx674.textContent = "Buy X";
+    bx674.dataset.buy = "custom";
+    bx674.onclick = () => act2(bx674, { mint: pos.mint,
+                                        token_symbol: pos.symbol,
+                                        chain: pos.chain || "solana" }, note);
+    buys.appendChild(bx674);
     c.appendChild(buys);
     c.appendChild(note);
     c.appendChild(routeBox(pos.mint, pos.symbol, pos.chain, note));
