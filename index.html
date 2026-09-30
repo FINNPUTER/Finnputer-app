@@ -500,10 +500,6 @@ input{font:inherit;color:inherit}
             <p class="tiny" style="margin-top:12px">The archive stays in the bot. It is the one
               thing here that cannot be bought, so it is not on display.</p>
           </div>
-          <div class="card spot rv" id="burnCard">
-            <div class="head"><h2>Buyback and burn</h2></div>
-            <div class="list" id="burnBody"><div class="skel"></div></div>
-          </div>
         </div>
       </div>
     </section>
@@ -908,7 +904,7 @@ function sigRow(s) {
 }
 
 async function loadSignals() {
-  loadStats(); loadBurns();
+  loadStats();
   const box = $("#sigList");
   try {
     /* 660b: signed in, the list follows the viewer's access: Premium sees
@@ -951,24 +947,6 @@ async function loadStats() {
       countUp(c.querySelector("u"), Number(v || 0));
     });
   } catch (e) { box.innerHTML = ""; }
-}
-
-async function loadBurns() {
-  const b = $("#burnBody");
-  try {
-    const d = await api("/v1/burns");
-    b.innerHTML =
-      '<div class="row"><div class="grow"><b>Burned so far</b><small>bought back from fees</small></div>' +
-      '<div class="right"><b class="num gold">' +
-      (Number(d.burned_tokens || d.total_burned || 0)).toLocaleString("en-US") + "</b>" +
-      /* Only state the threshold when the API says it knows it. It is an
-         environment variable set on the worker, and the core-api is a
-         different process: printing its fallback published a number nobody
-         had set. */
-      (d.threshold_known
-        ? '<small class="num">' + Number(d.threshold_sol) + " SOL per burn</small>"
-        : "") + "</div></div>";
-  } catch (e) { b.innerHTML = '<div class="empty">Burn figures unavailable.</div>'; }
 }
 
 $("#sigFilter").addEventListener("click", e => {
