@@ -1810,7 +1810,7 @@ async function loadMe() {
        Rauschen. Vier Nullzeilen untereinander verdecken die eine, die
        etwas haelt. */
     (d.chains || []).filter(c => c.unreadable ||
-        (Number(c.balance) || 0) > 0).forEach(c => {
+        (Number(c.balance) || 0) > 0 || (Number(c.usdc) || 0) > 0).forEach(c => {
       const r = el("div", "row");
       if (c.unreadable) {
         r.innerHTML = '<div class="grow"><b>' + esc(c.name || c.chain) + "</b>" +
@@ -1824,6 +1824,10 @@ async function loadMe() {
           esc(c.name || c.chain) + "</span></b>" +
           '<small class="num">' + (c.price_known === false
             ? "price unavailable" : usd(c.price_usd) + " each") +
+          /* 679: USDC auf derselben Kette, im Betrag rechts schon drin. */
+          ((Number(c.usdc) || 0) > 0
+            ? " · + " + Number(c.usdc).toLocaleString("en-US",
+                { maximumFractionDigits: 2 }) + " USDC" : "") +
           "</small></div>" +
           '<div class="right"><b class="num">' +
           Number(c.balance).toLocaleString("en-US",
