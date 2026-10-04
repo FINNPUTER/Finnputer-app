@@ -1,0 +1,20 @@
+FINNPUTER App (app.finnputerdex.com), Stand 04.10.2026
+
+Neu:
+- Mit Tagesgrenze fuer Halter (PREMIUM_HOLDER_DAILY in core-api) steht auf der
+  Premium-Karte "10 calls a day, no 🔥" statt "every call except 🔥".
+- Ueber der Liste steht jetzt, was man sieht: "live · newest 20m ago" fuer
+  Premium, "latest hit 2h ago" fuer alle anderen. Vorher stand bei beiden
+  "newest", und ohne Premium sah es aus, als gaebe es seit Stunden keinen
+  Call.
+- Aus 721: Premium-Karte auf dem aktuellen Stand, Preis und
+  Halter-Bedingungen kommen vom Bot.
+
+Hochladen: alle Dateien ins Repo der App, wie immer per GitHub-Web-Upload.
+
+Damit du als Admin in der App alles live siehst, braucht der Dienst
+core-api in Railway:
+  ADMIN_TELEGRAM_ID   (derselbe Wert wie im worker)
+Und fuer die Zahlen auf der Premium-Karte:
+  ALERT_MIN_HOLD_USD, PREMIUM_HOLDER_DELAY_MIN, PREMIUM_HOLDER_DAILY,
+  PREMIUM_PRICE_SOL, PREMIUM_DAYS

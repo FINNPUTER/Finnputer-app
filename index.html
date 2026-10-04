@@ -478,15 +478,16 @@ input{font:inherit;color:inherit}
 
         <div class="col">
           <div class="card spot rv" id="premCard">
-            <div class="head"><h2>🔥 Premium</h2><p class="num">0.1 SOL a week</p></div>
+            <div class="head"><h2>🔥 Premium</h2><p class="num" id="premPrice">0.1 SOL a week</p></div>
             <div class="list" style="margin-top:10px">
-              <div class="row"><div class="grow"><b>Every 🔥 call, live</b><small>the tokens our wallets were early on</small></div></div>
-              <div class="row"><div class="grow"><b>Every wallet signal, live</b><small>a wallet with a real record just bought</small></div></div>
-              <div class="row"><div class="grow"><b>The full feed, if you want it</b><small>every call as we send it, the moonshots included</small></div></div>
-              <div class="row"><div class="grow"><b>Auto buy</b><small>also while you sleep</small></div></div>
+              <div class="row"><div class="grow"><b>Every call, the second it fires</b><small>the 🔥 ones too, those go nowhere else</small></div></div>
+              <div class="row"><div class="grow"><b>Calls that stay alive</b><small>the message keeps updating: price, peak, who is buying, who is selling</small></div></div>
+              <div class="row"><div class="grow"><b>A ping when it matters</b><small>at 2x, 5x and 10x, and when the dev sells</small></div></div>
+              <div class="row"><div class="grow"><b>Sell right from the call</b><small>half, all, or just your initial so the rest rides for free</small></div></div>
+              <div class="row"><div class="grow"><b>Auto buy</b><small>if you want the bot to move while you sleep</small></div></div>
             </div>
-            <p class="tiny" style="margin-top:10px">Half of our 🔥 calls doubled after we sent them, every call counted.
-              Hold $50 of $FINNPUTER and you get every call except 🔥, ten minutes later, free.
+            <p class="tiny" style="margin-top:10px">Half of our 🔥 calls doubled at some point after we sent them, every call counted.
+              <span id="premHold">Hold $50 of $FINNPUTER and you get every call except 🔥, ten minutes later, free.</span>
               Trading fee stays 0.8%, 10% off through an invite link.</p>
             <div class="btns" style="margin-top:12px">
               <a class="btn go" target="_blank" rel="noopener" id="premBtn" href="#">Get Premium in the bot</a>
@@ -903,6 +904,31 @@ function sigRow(s) {
   return r;
 }
 
+/* 721: price and holder terms come from the API, so a change in the bot's
+   settings shows here without a new upload. No terms in the answer: the
+   text in the page stays as it is. */
+function fillTerms(t) {
+  if (!t) return;
+  const p = document.getElementById("premPrice");
+  if (p && t.price_sol) {
+    const d = Number(t.days || 0);
+    const per = !("days" in t) ? "" : d === 7 ? " a week" : d === 30 ? " a month"
+      : d > 0 ? " for " + d + " days" : " once, for life";
+    if (per) p.textContent = String(t.price_sol) + " SOL" + per;
+  }
+  const h = document.getElementById("premHold");
+  if (h && t.hold_usd) {
+    const m = Number(t.holder_delay_min);
+    const when = !("holder_delay_min" in t) ? "a little later"
+      : m > 0 ? m + " minutes later" : "at the same time";
+    /* 733: with a daily limit the card says the number. */
+    const cap = Number(t.holder_daily || 0);
+    h.textContent = "Hold $" + Math.round(t.hold_usd) + " of $FINNPUTER and you get " +
+      (cap > 0 ? cap + " calls a day, no 🔥, " : "every call except 🔥, ") +
+      when + ", free.";
+  }
+}
+
 async function loadSignals() {
   loadStats();
   const box = $("#sigList");
@@ -913,11 +939,16 @@ async function loadSignals() {
     try { _ini = INIT || ""; } catch (e) { _ini = ""; }
     const d = await api("/v1/signals?limit=40" + (SIG_KIND ? "&kind=" + SIG_KIND : ""),
       _ini ? { headers: { "x-telegram-init-data": _ini } } : undefined);
+    try { fillTerms(d.terms); } catch (e) {}
     box.innerHTML = "";
     const rows = d.signals || [];
     if (!rows.length) { box.innerHTML = '<div class="empty">Nothing published in this window yet.</div>'; return; }
     rows.forEach(s => box.appendChild(sigRow(s)));
-    $("#sigAge").textContent = "newest " + ago(rows[0].sent_at);
+    /* 728: without Premium the list holds only calls that already ran.
+       "newest 2h ago" then read as if nothing had been called for two
+       hours, while calls went out the whole time. */
+    $("#sigAge").textContent = (d.access === "public" ? "latest hit "
+      : d.access === "live" ? "live · newest " : "newest ") + ago(rows[0].sent_at);
     /* 660: the API says what this visitor gets, so the line cannot drift
        from the rule. */
     if (d.access_note && $("#sigNote")) {
