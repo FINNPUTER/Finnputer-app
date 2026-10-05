@@ -1,20 +1,19 @@
-FINNPUTER App (app.finnputerdex.com), Stand 04.10.2026
+FINNPUTER App (app.finnputerdex.com), Stand 05.10.2026
 
-Neu:
-- Mit Tagesgrenze fuer Halter (PREMIUM_HOLDER_DAILY in core-api) steht auf der
-  Premium-Karte "10 calls a day, no 🔥" statt "every call except 🔥".
-- Ueber der Liste steht jetzt, was man sieht: "live · newest 20m ago" fuer
-  Premium, "latest hit 2h ago" fuer alle anderen. Vorher stand bei beiden
-  "newest", und ohne Premium sah es aus, als gaebe es seit Stunden keinen
-  Call.
-- Aus 721: Premium-Karte auf dem aktuellen Stand, Preis und
-  Halter-Bedingungen kommen vom Bot.
+Neu (759): DIE SEITE PASST WIEDER AUF DAS HANDY
+Auf dem Handy lief die Startseite rechts aus dem Bild: "live · newest 12m"
+abgeschnitten, bei den Signalen fehlten das Vielfache und der Marktwert.
+Ursache war die Premium Karte darunter. Ihre Beschreibungen durften nicht
+umbrechen, die laengste Zeile war 382 Punkte breit, und sie hat die ganze
+Spalte samt der Signal Liste auf 424 Punkte gezogen. Ein Handy hat 360.
+
+1. Die Spalte ist jetzt fest so breit wie der Bildschirm. Kein Inhalt
+   kann sie mehr auseinanderdruecken.
+2. Die Beschreibungen in der Premium Karte brechen um, statt
+   abgeschnitten zu werden.
+
+Geprueft bei 320, 360, 390, 430, 768 und 1280 Punkten Breite, auf allen
+sieben Seiten: nichts ragt mehr ueber den Rand.
 
 Hochladen: alle Dateien ins Repo der App, wie immer per GitHub-Web-Upload.
-
-Damit du als Admin in der App alles live siehst, braucht der Dienst
-core-api in Railway:
-  ADMIN_TELEGRAM_ID   (derselbe Wert wie im worker)
-Und fuer die Zahlen auf der Premium-Karte:
-  ALERT_MIN_HOLD_USD, PREMIUM_HOLDER_DELAY_MIN, PREMIUM_HOLDER_DAILY,
-  PREMIUM_PRICE_SOL, PREMIUM_DAYS
+Am Bot aendert sich nichts.
